@@ -11,3 +11,7 @@ api自行去desp中index文件进行替换，使用ctrl+f搜索YOU_KIMI_API_KEY�
 三、部署教程
 1、虚拟主机搭建：
 2、本地服务部署：
+
+
+个人主页
+https://space.bilibili.com/521205099
