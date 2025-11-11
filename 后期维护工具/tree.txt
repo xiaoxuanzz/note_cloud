@@ -1,0 +1,56 @@
+﻿卷 GAME 的文件夹 PATH 列表
+卷序列号为 404E-90B1
+D:\PHPSTUDY_PRO\NOTE_CLOUD
+│  ajax.php
+│  api.php
+│  favorites.php
+│  index.php
+│  login.php
+│  logout.php
+│  note_cloud.zip
+│  recycle.php
+│  register.php
+│  settings.php
+│  view.php
+│  
+├─admin
+│      dashboard.php
+│      delete_note.php
+│      delete_user.php
+│      edit_note.php
+│      edit_user.php
+│      index.php
+│      users.php
+│      
+├─css
+│      bootstrap.min.css
+│      
+├─desp
+│      create.php
+│      index.html
+│      
+├─install
+│      install.php
+│      
+├─js
+│      bootstrap.bundle.min.js
+│      
+├─knowledge
+│  │  add_category.php
+│  │  categories.php
+│  │  create.php
+│  │  delete.php
+│  │  edit.php
+│  │  favories_view.php
+│  │  index.php
+│  │  recycle_view.php
+│  │  view.php
+│  │  
+│  └─uploads
+│      ├─files
+│      └─images
+└─后期维护工具
+        tree.txt.tmp
+        一件合并所有php.bat
+        一件获取项目树结构.bat
+        

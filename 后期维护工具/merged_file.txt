@@ -1,0 +1,4657 @@
+ 
+======================================================== 
+�ϲ�ʱ��: 2025/11/11 �ܶ� 22:23:01.35 
+�ϲ�Ŀ¼: .. 
+======================================================== 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\ajax.php ======= 
+ 
+<?php
+include('includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    echo json_encode(['error' => '未授权']);
+    exit();
+}
+
+// 获取AJAX请求的类型和数据
+$action = $_POST['action'] ?? '';
+
+switch ($action) {
+    case 'save_note':
+        $id = $_POST['id'];
+        $title = $_POST['title'];
+        $content = $_POST['content'];
+        
+        if ($id) {
+            // 更新笔记
+            $stmt = $pdo->prepare("UPDATE knowledge_notes SET title = ?, content = ? WHERE id = ? AND user_id = ?");
+            $stmt->execute([$title, $content, $id, $_SESSION['user_id']]);
+            echo json_encode(['status' => '更新成功']);
+        } else {
+            // 创建笔记
+            $stmt = $pdo->prepare("INSERT INTO knowledge_notes (user_id, title, content) VALUES (?, ?, ?)");
+            $stmt->execute([$_SESSION['user_id'], $title, $content]);
+            echo json_encode(['status' => '创建成功', 'id' => $pdo->lastInsertId()]);
+        }
+        break;
+    case 'delete_note':
+        $id = $_POST['id'];
+        
+        $stmt = $pdo->prepare("UPDATE knowledge_notes SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?");
+        $stmt->execute([$id, $_SESSION['user_id']]);
+        
+        echo json_encode(['status' => '删除成功']);
+        break;
+    case 'get_note':
+        $id = $_POST['id'];
+        
+        $stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE id = ? AND user_id = ?");
+        $stmt->execute([$id, $_SESSION['user_id']]);
+        $note = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$note) {
+            echo json_encode(['error' => '笔记不存在']);
+        } else {
+            echo json_encode(['title' => $note['title'], 'content' => $note['content'], 'image_path' => $note['image_path'], 'file_path' => $note['file_path']]);
+        }
+        break;
+    case 'upload_image':
+        if (!empty($_FILES['image']['name'])) {
+            $target_dir = 'uploads/images/';
+            $target_file = $target_dir . basename($_FILES["image"]["name"]);
+            $imageFileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+
+            // 允许的文件类型
+            $allowed_types = ['jpg', 'jpeg', 'png', 'gif'];
+
+            if (in_array($imageFileType, $allowed_types)) {
+                if (!is_dir($target_dir)) {
+                    mkdir($target_dir, 0777, true);
+                }
+                if (move_uploaded_file($_FILES["image"]["tmp_name"], $target_file)) {
+                    echo json_encode(['status' => '上传成功', 'image_path' => $target_file]);
+                } else {
+                    echo json_encode(['error' => '图片上传失败']);
+                }
+            } else {
+                echo json_encode(['error' => '只允许 JPG, JPEG, PNG, GIF 格式']);
+            }
+        } else {
+            echo json_encode(['error' => '未上传图片']);
+        }
+        break;
+    case 'upload_file':
+        if (!empty($_FILES['file']['name'])) {
+            $target_dir = 'uploads/files/';
+            $target_file = $target_dir . basename($_FILES["file"]["name"]);
+            $file_type = pathinfo($target_file, PATHINFO_EXTENSION);
+
+            if (!is_dir($target_dir)) {
+                mkdir($target_dir, 0777, true);
+            }
+            if (move_uploaded_file($_FILES["file"]["tmp_name"], $target_file)) {
+                echo json_encode(['status' => '上传成功', 'file_path' => $target_file]);
+            } else {
+                echo json_encode(['error' => '文件上传失败']);
+            }
+        } else {
+            echo json_encode(['error' => '未上传文件']);
+        }
+        break;
+    default:
+        echo json_encode(['error' => '未知操作']);
+} 
+======= ������D:\phpstudy_pro\note_cloud\ajax.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\api.php ======= 
+ 
+
+<?php
+include('includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("HTTP/1.1 401 Unauthorized");
+    echo json_encode(['error' => '未授权']);
+    exit();
+}
+
+// 获取请求方法和路径
+$request_method = $_SERVER['REQUEST_METHOD'];
+$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+
+// 路由处理
+switch ($path) {
+    case '/api/notes':
+        if ($request_method === 'GET') {
+            // 获取笔记列表
+            $stmt = $pdo->prepare("SELECT * FROM notes WHERE user_id = ? ORDER BY updated_at DESC");
+            $stmt->execute([$_SESSION['user_id']]);
+            $notes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            echo json_encode($notes);
+        } elseif ($request_method === 'POST') {
+            // 创建笔记
+            $data = json_decode(file_get_contents('php://input'), true);
+            $title = $data['title'];
+            $content = $data['content'];
+            
+            $stmt = $pdo->prepare("INSERT INTO notes (user_id, title, content) VALUES (?, ?, ?)");
+            $stmt->execute([$_SESSION['user_id'], $title, $content]);
+            
+            echo json_encode(['id' => $pdo->lastInsertId()]);
+        }
+        break;
+    case '/api/notes/' . end(explode('/', trim($path, '/'))):
+        $id = end(explode('/', trim($path, '/')));
+        if ($request_method === 'GET') {
+            // 获取单个笔记
+            $stmt = $pdo->prepare("SELECT * FROM notes WHERE id = ? AND user_id = ?");
+            $stmt->execute([$id, $_SESSION['user_id']]);
+            $note = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$note) {
+                header("HTTP/1.1 404 Not Found");
+                echo json_encode(['error' => '笔记不存在']);
+            } else {
+                echo json_encode($note);
+            }
+        } elseif ($request_method === 'PUT') {
+            // 更新笔记
+            $data = json_decode(file_get_contents('php://input'), true);
+            $title = $data['title'];
+            $content = $data['content'];
+            
+            $stmt = $pdo->prepare("UPDATE notes SET title = ?, content = ? WHERE id = ? AND user_id = ?");
+            $stmt->execute([$title, $content, $id, $_SESSION['user_id']]);
+            
+            echo json_encode(['status' => '更新成功']);
+        } elseif ($request_method === 'DELETE') {
+            // 删除笔记
+            $stmt = $pdo->prepare("DELETE FROM notes WHERE id = ? AND user_id = ?");
+            $stmt->execute([$id, $_SESSION['user_id']]);
+            
+            echo json_encode(['status' => '删除成功']);
+        }
+        break;
+    default:
+        header("HTTP/1.1 404 Not Found");
+        echo json_encode(['error' => 'API未找到']);
+} 
+======= ������D:\phpstudy_pro\note_cloud\api.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\favorites.php ======= 
+ 
+<?php
+session_start();
+include('includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+// 处理收藏和取消收藏的请求
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['note_id'])) {
+    $noteId = $_POST['note_id'];
+    if (isset($_POST['action']) && $_POST['action'] === 'add_favorite') {
+        try {
+            $stmt = $pdo->prepare("INSERT INTO favorites (user_id, note_id, created_at) VALUES (?, ?, NOW())");
+            $stmt->execute([$_SESSION['user_id'], $noteId]);
+        } catch (Exception $e) {
+            error_log("Failed to add favorite: " . $e->getMessage());
+        }
+    } elseif (isset($_POST['action']) && $_POST['action'] === 'remove_favorite') {
+        try {
+            $stmt = $pdo->prepare("DELETE FROM favorites WHERE user_id = ? AND note_id = ?");
+            $stmt->execute([$_SESSION['user_id'], $noteId]);
+        } catch (Exception $e) {
+            error_log("Failed to remove favorite: " . $e->getMessage());
+        }
+    }
+    header("Location: favorites.php");
+    exit();
+}
+
+// 获取收藏夹中的笔记
+$favoriteNotes = [];
+try {
+    $stmt = $pdo->prepare("SELECT kn.* FROM knowledge_notes kn 
+                           INNER JOIN favorites f ON kn.id = f.note_id 
+                           WHERE f.user_id = ? 
+                           ORDER BY kn.created_at DESC");
+    $stmt->execute([$_SESSION['user_id']]);
+    $favoriteNotes = $stmt->fetchAll();
+} catch (Exception $e) {
+    error_log("Failed to fetch favorite notes: " . $e->getMessage());
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>收藏夹</title>
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            width: 200px;
+            background-color: #343a40;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            padding: 20px 0;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+            z-index: 1000;
+        }
+        .sidebar.collapsed {
+            transform: translateX(-200px);
+        }
+        .sidebar .nav-link {
+            color: #dfe6e9;
+            padding: 10px 20px;
+            display: block;
+        }
+        .sidebar .nav-link:hover {
+            background-color: #485460;
+        }
+        .sidebar .nav-link.active {
+            background-color: #6c7ae0;
+        }
+        .main-content {
+            margin-left: 200px;
+            padding: 20px;
+            transition: margin-left 0.3s ease;
+        }
+        .main-content.collapsed {
+            margin-left: 0;
+        }
+        .toggle-sidebar {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1001;
+            display: none;
+            background-color: #343a40;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-200px);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .toggle-sidebar {
+                display: block;
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-content.active {
+                margin-left: 200px;
+            }
+        }
+        .note-card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            transition: transform 0.3s ease;
+        }
+        .note-card:hover {
+            transform: translateY(-5px);
+        }
+        .note-card .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .note-card .card-body {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-2 sidebar">
+                <ul class="nav flex-column">
+                    <li class="nav-item active">
+                        <a class="nav-link" href="knowledge/index.php">知识库</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="recycle.php">回收站</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="favorites.php">收藏</a>
+                    </li>
+					<li class="nav-item">
+					    <a class="nav-link" href="desp/index.html" target="_blank" rel="noopener noreferrer">AI智能笔记</a>
+					</li>
+                    <?php if (isset($_SESSION['is_xiaoxuan']) && $_SESSION['is_xiaoxuan']): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="settings.php">设置</a>
+                        </li>
+                    <?php endif; ?>
+                     <li class="nav-item">
+                         <a class="nav-link" href="logout.php">退出登录</a>
+                     </li>
+                </ul>
+            </div>
+            <div class="col-md-10 main-content">
+				<h2>收藏夹</h2>
+				<!-- 按钮控件-->
+				<button class="toggle-sidebar d-lg-none" onclick="toggleSidebar()" style="left: 85%;" id="an">☰</button>
+				<br/>
+                
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h3 class="mb-0">收藏的笔记</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="row" id="notesContainer">
+                                    <?php if (empty($favoriteNotes)): ?>
+                                        <div class="col-md-12">
+                                            <div class="card note-card">
+                                                <div class="card-body text-center">
+                                                    <p class="card-text">还没有收藏的笔记哦</p>
+                                                    <p class="card-text">浏览知识库并收藏您喜欢的笔记~</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <?php else: ?>
+                                        <?php foreach ($favoriteNotes as $note): ?>
+                                            <div class="col-md-12 mb-4">
+                                                <div class="card note-card">
+                                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                                        <span><?php echo htmlspecialchars($note['title']); ?></span>
+                                                        <small class="text-muted"><?php echo $note['created_at']; ?></small>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <p class="card-text"><?php echo htmlspecialchars($note['content']); ?></p>
+                                                        <?php
+                                                        $hasImages = !empty($note['images']) && json_decode($note['images'], true);
+                                                        $hasFiles = !empty($note['files']) && json_decode($note['files'], true);
+                                                        if ($hasImages || $hasFiles): ?>
+                                                            <p class="text-muted">（含图片或文件）</p>
+                                                        <?php endif; ?>
+                                                        <div class="d-flex justify-content-between mt-2">
+                                                            <div>
+                                                                <a href="knowledge/favories_view.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-secondary">浏览</a>
+                                                                <form method="POST" action="favorites.php" style="display: inline;">
+                                                                    <input type="hidden" name="note_id" value="<?php echo $note['id']; ?>">
+                                                                    <input type="hidden" name="action" value="remove_favorite">
+                                                                    <button type="submit" class="btn btn-sm btn-outline-danger">取消收藏</button>
+                                                                </form>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const mainContent = document.querySelector('.main-content');
+            sidebar.classList.toggle('active');
+            mainContent.classList.toggle('active');
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('click', function(event) {
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                const toggleButton = document.querySelector('.toggle-sidebar');
+
+                if (!sidebar.contains(event.target) && !toggleButton.contains(event.target) && window.innerWidth <= 768) {
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.querySelector('.sidebar');
+                    const mainContent = document.querySelector('.main-content');
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+        }, false);
+
+        document.addEventListener('touchend', function(e) {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, false);
+
+        function handleSwipe() {
+            if (window.innerWidth <= 768) {
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                const swipeThreshold = 50;
+                const difference = Math.abs(touchEndX - touchStartX);
+
+                if (difference > swipeThreshold && sidebar.classList.contains('active')) {
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            }
+        }
+    </script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\favorites.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\index.php ======= 
+ 
+<?php
+/**
+ * PZIOT笔记网 - 入口文件
+ * 功能：安装检测 → 登录验证 → 自动跳转
+ * 
+ * 修复说明：
+ * 1. INSTALL_LOCK 路径修复：BASE_PATH . '/install.lock'（必须带斜杠）
+ * 2. 所有 header Location 改为绝对路径（带 /）避免路径混淆
+ */
+
+// ==================== 1. 安装检测 ====================
+define('BASE_PATH', __DIR__);
+define('INSTALL_LOCK', BASE_PATH . '/install/install.lock');  // ✅ 修复：添加斜杠
+
+// 检查是否已安装
+if (!file_exists(INSTALL_LOCK)) {
+    // 未安装 -> 跳转到安装页面
+    header('Location: /install/install.php');  // ✅ 使用绝对路径
+    exit();
+}
+
+// ==================== 2. 会话初始化 ====================
+session_start();
+
+// ==================== 3. 登录状态验证 ====================
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    // 未登录 -> 跳转到登录页
+    header('Location: /login.php');  // ✅ 使用绝对路径
+    exit();
+}
+
+// ==================== 4. 已登录 -> 跳转到知识库首页 ====================
+// 301永久重定向，避免SEO问题
+header('HTTP/1.1 301 Moved Permanently');
+header('Location: /knowledge/index.php');  // ✅ 使用绝对路径
+exit(); 
+======= ������D:\phpstudy_pro\note_cloud\index.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\login.php ======= 
+ 
+<?php
+session_start();
+include('includes/config.php');
+
+// 检查用户是否已登录
+if (isset($_SESSION['user_id'])) {
+    header("Location: knowledge/index.php");
+    exit();
+}
+
+// 处理用户登录
+$login_error = '';
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+    
+    // 使用 $pdo 查询数据库
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
+    $stmt->execute([$username]);
+    $user = $stmt->fetch();
+    
+    if ($user && $password === $user['password']) {
+        // 检查是否通过审批
+        if ($user['approved'] == 1) {
+            // 登录成功，设置会话变量
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['username'] = $user['username'];
+            $_SESSION['role'] = $user['role'];
+            
+            // 检查是否是特定用户 xiaoxuan
+            if ($user['username'] === 'xiaoxuan') {
+                $_SESSION['is_xiaoxuan'] = true;
+            }
+            
+            header("Location: knowledge/index.php");
+            exit();
+        } else {
+            $login_error = "您的账号尚未通过审批，请等待管理员审核";
+        }
+    } else {
+        $login_error = "用户名或密码错误";
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PZIOT笔记网 - 登录</title>
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico)" type="image/x-icon">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6 col-sm-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="mb-0">登录到PZIOT笔记网</h3>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            <div class="mb-3">
+                                <label for="username" class="form-label">用户名</label>
+                                <input type="text" class="form-control" id="username" name="username" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="password" class="form-label">密码</label>
+                                <input type="password" class="form-control" id="password" name="password" required>
+                            </div>
+                            <button type="submit" name="login" class="btn btn-primary w-100">登录</button>
+                            <?php if (!empty($login_error)): ?>
+                                <div class="alert alert-danger mt-3"><?php echo $login_error; ?></div>
+                            <?php endif; ?>
+                        </form>
+                        <a href="register.php" class="btn btn-link text-center mt-3">没有账号？立即注册</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\login.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\logout.php ======= 
+ 
+<?php
+session_start();
+
+// 销毁会话
+$_SESSION = [];
+session_unset();
+session_destroy();
+
+// 重定向到登录页面
+header("Location: login.php");
+exit(); 
+======= ������D:\phpstudy_pro\note_cloud\logout.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\recycle.php ======= 
+ 
+<?php
+session_start();
+include('includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+// 获取回收站中的笔记
+$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE user_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC");
+$stmt->execute([$_SESSION['user_id']]);
+$recycleNotes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// 处理恢复笔记
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['restore'])) {
+    $noteId = $_POST['note_id'];
+    $stmt = $pdo->prepare("UPDATE knowledge_notes SET deleted_at = NULL WHERE id = ? AND user_id = ?");
+    $stmt->execute([$noteId, $_SESSION['user_id']]);
+    header("Location: recycle.php");
+    exit();
+}
+
+// 处理彻底删除笔记
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete-permanent'])) {
+    $noteId = $_POST['note_id'];
+    $stmt = $pdo->prepare("DELETE FROM knowledge_notes WHERE id = ? AND user_id = ?");
+    $stmt->execute([$noteId, $_SESSION['user_id']]);
+    header("Location: recycle.php");
+    exit();
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PZIOT笔记网</title>
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico)" type="image/x-icon">
+    <style>
+        .sidebar {
+            width: 200px;
+            background-color: #343a40;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            padding: 20px 0;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+            z-index: 1000;
+        }
+        .sidebar.collapsed {
+            transform: translateX(-200px);
+        }
+        .sidebar .nav-link {
+            color: #dfe6e9;
+            padding: 10px 20px;
+            display: block;
+        }
+        .sidebar .nav-link:hover {
+            background-color: #485460;
+        }
+        .sidebar .nav-link.active {
+            background-color: #6c7ae0;
+        }
+        .main-content {
+            margin-left: 200px;
+            padding: 20px;
+            transition: margin-left 0.3s ease;
+        }
+        .main-content.collapsed {
+            margin-left: 0;
+        }
+        .toggle-sidebar {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1001;
+            display: none;
+            background-color: #343a40;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-200px);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .toggle-sidebar {
+                display: block;
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-content.active {
+                margin-left: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-2 sidebar">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="knowledge/index.php">知识库</a>
+                    </li>
+                    <li class="nav-item active">
+                        <a class="nav-link" href="recycle.php">回收站</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="favorites.php">收藏</a>
+                    </li>
+					<li class="nav-item">
+					    <a class="nav-link" href="desp/index.html" target="_blank" rel="noopener noreferrer">AI智能笔记</a>
+					</li>
+                    <?php if (isset($_SESSION['is_xiaoxuan']) && $_SESSION['is_xiaoxuan']): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="settings.php">设置</a>
+                        </li>
+                    <?php endif; ?>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../logout.php">退出登录</a>
+                    </li>
+                </ul>
+            </div>
+            <div class="col-md-10 main-content">
+                <h2>回收站</h2>
+				<button class="toggle-sidebar d-lg-none" onclick="toggleSidebar()" style="left: 85%;" id="an">☰</button>
+				<br/>
+                <div class="row mt-4">
+                    <?php foreach ($recycleNotes as $note): ?>
+                        <div class="col-md-12">
+                            <div class="card mb-4">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <span><?php echo htmlspecialchars($note['title']); ?></span>
+                                    <small class="text-muted">删除时间: <?php echo $note['deleted_at']; ?></small>
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text"><?php echo htmlspecialchars($note['content']); ?></p>
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <a href="knowledge/recycle_view.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-secondary">查看</a>
+                                        </div>
+                                        <div>
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="note_id" value="<?php echo $note['id']; ?>">
+                                                <button type="submit" name="restore" class="btn btn-sm btn-outline-primary">恢复</button>
+                                            </form>
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="note_id" value="<?php echo $note['id']; ?>">
+                                                <button type="submit" name="delete-permanent" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定永久删除此笔记吗？')">永久删除</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const mainContent = document.querySelector('.main-content');
+            sidebar.classList.toggle('active');
+            mainContent.classList.toggle('active');
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('click', function(event) {
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                const toggleButton = document.querySelector('.toggle-sidebar');
+                if (!sidebar.contains(event.target) && !toggleButton.contains(event.target) && window.innerWidth <= 768) {
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.querySelector('.sidebar');
+                    const mainContent = document.querySelector('.main-content');
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+        }, false);
+
+        document.addEventListener('touchend', function(e) {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, false);
+
+        function handleSwipe() {
+            if (window.innerWidth <= 768) {
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                const swipeThreshold = 50;
+                const difference = Math.abs(touchEndX - touchStartX);
+
+                if (difference > swipeThreshold && sidebar.classList.contains('active')) {
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            }
+        }
+
+        // 按钮的JS
+        function isMobile() {
+            return /Mobi|Android|iPhone/i.test(navigator.userAgent);
+        }
+        if (isMobile()) {
+            document.querySelector('.toggle-sidebar').style.display = 'block';
+        } else {
+            document.querySelector('.toggle-sidebar').style.display = 'none';
+        }
+    </script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\recycle.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\register.php ======= 
+ 
+<?php
+session_start();
+
+// 检查配置文件
+if (!file_exists('includes/config.php')) {
+    die('<div style="text-align:center; padding:50px;">
+            <h2>⚠️ 配置文件不存在</h2>
+            <p>请先运行 <a href="install/install.php">安装程序</a></p>
+        </div>');
+}
+
+include('includes/config.php');
+
+// ✅ 创建 PDO 数据库连接
+try {
+    $pdo = new PDO(
+        "mysql:host={$dbconfig['host']};port={$dbconfig['port']};dbname={$dbconfig['dbname']};charset=utf8mb4",
+        $dbconfig['user'],
+        $dbconfig['pwd'],
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false
+        ]
+    );
+} catch (PDOException $e) {
+    die('<div style="text-align:center; padding:50px; color:red;">
+            <h2>数据库连接失败</h2>
+            <p>错误信息：' . htmlspecialchars($e->getMessage()) . '</p>
+            <p>请检查 includes/config.php 配置是否正确</p>
+        </div>');
+}
+
+// 检查是否已登录
+if (isset($_SESSION['user_id'])) {
+    header("Location: knowledge/index.php");
+    exit();
+}
+
+// 处理注册
+$register_error = '';
+$register_success = '';
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $username = trim($_POST['username']);
+    $email = trim($_POST['email']);
+    $password = $_POST['password'];
+    $password_confirm = $_POST['password_confirm'];
+    
+    // 验证输入
+    if (empty($username) || empty($email) || empty($password)) {
+        $register_error = "所有字段都必须填写";
+    } elseif (strlen($username) < 3 || strlen($username) > 20) {
+        $register_error = "用户名长度必须在3-20位之间";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $register_error = "邮箱格式不正确";
+    } elseif (strlen($password) < 6) {
+        $register_error = "密码长度至少6位";
+    } elseif ($password !== $password_confirm) {
+        $register_error = "两次密码不一致";
+    } else {
+        try {
+            // 检查用户名是否已存在
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
+            $stmt->execute([$username]);
+            if ($stmt->fetch()) {
+                $register_error = "用户名已存在";
+            } else {
+                // 检查邮箱是否已存在
+                $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+                $stmt->execute([$email]);
+                if ($stmt->fetch()) {
+                    $register_error = "邮箱已被注册";
+                } else {
+                    // ✅ 插入新用户（approved 默认为 0，需要审批）
+                    $passwordHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+                    $stmt = $pdo->prepare("INSERT INTO users (username, password_hash, email, role, status, approved, created_at) VALUES (?, ?, ?, 'user', 1, 0, NOW())");
+                    $stmt->execute([$username, $passwordHash, $email]);
+                    
+                    $register_success = "注册成功！您的账号需要管理员审批，请耐心等待";
+                }
+            }
+        } catch (PDOException $e) {
+            $register_error = "系统错误，请稍后重试";
+            error_log("Register error: " . $e->getMessage());
+        }
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PZIOT笔记网 - 注册</title>
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+        }
+        .register-container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        .card-header {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            text-align: center;
+            padding: 20px;
+            border: none;
+        }
+        .card-header h3 {
+            margin: 0;
+            font-weight: bold;
+        }
+        .card-body {
+            padding: 30px;
+        }
+        .alert {
+            border-radius: 8px;
+            border: none;
+        }
+        .btn-success {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            border: none;
+            padding: 12px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
+        }
+        .form-control:focus {
+            border-color: #28a745;
+            box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+        }
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <div class="card">
+            <div class="card-header">
+                <h3>📝 账号注册</h3>
+            </div>
+            <div class="card-body">
+                <?php if (!empty($register_error)): ?>
+                    <div class="alert alert-danger"><?= htmlspecialchars($register_error) ?></div>
+                <?php endif; ?>
+                
+                <?php if (!empty($register_success)): ?>
+                    <div class="alert alert-success"><?= htmlspecialchars($register_success) ?></div>
+                    <div class="text-center">
+                        <a href="login.php" class="btn btn-success">前往登录</a>
+                    </div>
+                <?php else: ?>
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">用户名</label>
+                            <input type="text" class="form-control" id="username" name="username" required autofocus
+                                   value="<?= isset($_POST['username']) ? htmlspecialchars($_POST['username']) : '' ?>">
+                            <small class="text-muted">3-20位字母、数字或下划线</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">邮箱</label>
+                            <input type="email" class="form-control" id="email" name="email" required
+                                   value="<?= isset($_POST['email']) ? htmlspecialchars($_POST['email']) : '' ?>">
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">密码</label>
+                            <input type="password" class="form-control" id="password" name="password" required minlength="6">
+                            <small class="text-muted">至少6位字符</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password_confirm" class="form-label">确认密码</label>
+                            <input type="password" class="form-control" id="password_confirm" name="password_confirm" required minlength="6">
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">注册账号</button>
+                    </form>
+                    
+                    <div class="text-center mt-4">
+                        <a href="login.php" class="btn btn-link">已有账号？立即登录</a>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\register.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\settings.php ======= 
+ 
+<?php
+session_start();
+include('includes/config.php');
+
+// 检查用户是否登录且是 xiaoxuan 用户
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_xiaoxuan']) || !$_SESSION['is_xiaoxuan']) {
+    header("Location: index.php");
+    exit();
+}
+
+// 获取未审批用户
+$unapprovedUsers = [];
+try {
+    $stmt = $pdo->query("SELECT * FROM users WHERE approved = 0 ORDER BY created_at");
+    $unapprovedUsers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log("Failed to fetch unapproved users: " . $e->getMessage());
+}
+
+// 处理用户审批
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['approve_user'])) {
+    $userId = $_POST['user_id'];
+    try {
+        $stmt = $pdo->prepare("UPDATE users SET approved = 1 WHERE id = ?");
+        $stmt->execute([$userId]);
+        header("Location: settings.php");
+        exit();
+    } catch (Exception $e) {
+        error_log("Failed to approve user: " . $e->getMessage());
+    }
+}
+
+// 获取所有用户
+$users = [];
+try {
+    $stmt = $pdo->query("SELECT * FROM users ORDER BY created_at");
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log("Failed to fetch users: " . $e->getMessage());
+}
+
+// 获取所有笔记
+$notes = [];
+try {
+    $stmt = $pdo->query("SELECT * FROM knowledge_notes ORDER BY created_at");
+    $notes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log("Failed to fetch notes: " . $e->getMessage());
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PZIOT笔记网</title>
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico)" type="image/x-icon">
+    <style>
+        .sidebar {
+            width: 200px;
+            background-color: #343a40;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            padding: 20px 0;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+            z-index: 1000;
+        }
+        .sidebar.collapsed {
+            transform: translateX(-200px);
+        }
+        .sidebar .nav-link {
+            color: #dfe6e9;
+            padding: 10px 20px;
+            display: block;
+        }
+        .sidebar .nav-link:hover {
+            background-color: #485460;
+        }
+        .sidebar .nav-link.active {
+            background-color: #6c7ae0;
+        }
+        .main-content {
+            margin-left: 200px;
+            padding: 20px;
+            transition: margin-left 0.3s ease;
+        }
+        .main-content.collapsed {
+            margin-left: 0;
+        }
+        .toggle-sidebar {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1001;
+            display: none;
+            background-color: #343a40;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-200px);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+         .toggle-sidebar {
+             display: block;
+         }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-content.active {
+                margin-left: 200px;
+            }
+            .section-header {
+                font-size: 1.5rem;
+                margin-top: 20px;
+                margin-bottom: 15px;
+                border-bottom: 1px solid #dee2e6;
+                padding-bottom: 5px;
+            }
+            .table-container {
+                overflow-x: auto;
+                margin-bottom: 15px;
+            }
+            table {
+                min-width: 600px;
+            }
+            .form-group {
+                margin-bottom: 15px;
+            }
+            .form-group label {
+                display: block;
+                margin-bottom: 5px;
+            }
+            .form-group select,
+            .form-group input {
+                width: 100%;
+                padding: 8px;
+                box-sizing: border-box;
+            }
+            .btn-group {
+                margin-top: 10px;
+            }
+            .btn {
+                padding: 8px 12px;
+                margin-right: 5px;
+                margin-bottom: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-2 sidebar">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="knowledge/index.php">知识库</a>
+                    </li>
+                    <li class="nav-item active">
+                        <a class="nav-link" href="recycle.php">回收站</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="favorites.php">收藏</a>
+                    </li>
+					<li class="nav-item">
+					    <a class="nav-link" href="desp/index.html" target="_blank" rel="noopener noreferrer">AI智能笔记</a>
+					</li>
+                    <?php if (isset($_SESSION['is_xiaoxuan']) && $_SESSION['is_xiaoxuan']): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="settings.php">设置</a>
+                        </li>
+                    <?php endif; ?>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../logout.php">退出登录</a>
+                    </li>
+                </ul>
+            </div>
+            <div class="col-md-10 main-content">
+                <h2>系统设置</h2>
+				<button class="toggle-sidebar d-lg-none" onclick="toggleSidebar()" style="left: 85%;" id="an">☰</button>
+				<br/>
+                <!-- 用户审批区域 -->
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <h3 class="section-header">用户审批</h3>
+                        <div class="table-container">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>用户名</th>
+                                        <th>邮箱</th>
+                                        <th>创建时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($unapprovedUsers as $user): ?>
+                                        <tr>
+                                            <td><?php echo $user['id']; ?></td>
+                                            <td><?php echo htmlspecialchars($user['username']); ?></td>
+                                            <td><?php echo htmlspecialchars($user['email']); ?></td>
+                                            <td><?php echo $user['created_at']; ?></td>
+                                            <td>
+                                                <form method="POST" style="display: inline;">
+                                                    <input type="hidden" name="user_id" value="<?php echo $user['id']; ?>">
+                                                    <input type="hidden" name="approve_user" value="1">
+                                                    <button type="submit" class="btn btn-sm btn-primary">审批</button>
+                                                </form>
+                                                <form method="POST" action="admin/delete_user.php?id=<?php echo $user['id']; ?>" style="display: inline;">
+                                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('确定拒绝此用户吗？')">拒绝</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 用户管理区域 -->
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <h3 class="section-header">用户管理</h3>
+                        <div class="table-container">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>用户名</th>
+                                        <th>邮箱</th>
+                                        <th>角色</th>
+                                        <th>创建时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($users as $user): ?>
+                                        <tr>
+                                            <td><?php echo $user['id']; ?></td>
+                                            <td><?php echo htmlspecialchars($user['username']); ?></td>
+                                            <td><?php echo htmlspecialchars($user['email']); ?></td>
+                                            <td><?php echo $user['role']; ?></td>
+                                            <td><?php echo $user['created_at']; ?></td>
+                                            <td>
+                                                <a href="admin/edit_user.php?id=<?php echo $user['id']; ?>" class="btn btn-sm btn-primary">编辑</a>
+                                                <?php if ($user['username'] !== 'xiaoxuan'): ?>
+                                                    <a href="admin/delete_user.php?id=<?php echo $user['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('确定删除此用户吗？')">删除</a>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 笔记管理区域 -->
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <h3 class="section-header">笔记管理</h3>
+                        <div class="table-container">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>标题</th>
+                                        <th>内容</th>
+                                        <th>图片路径</th>
+                                        <th>文件路径</th>
+                                        <th>创建时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($notes as $note): ?>
+                                        <tr>
+                                            <td><?php echo $note['id']; ?></td>
+                                            <td><?php echo htmlspecialchars($note['title']); ?></td>
+                                            <td><?php echo htmlspecialchars($note['content']); ?></td>
+                                            <td><?php echo $note['image_path']; ?></td>
+                                            <td><?php echo $note['file_path']; ?></td>
+                                            <td><?php echo $note['created_at']; ?></td>
+                                            <td>
+                                                <a href="admin/edit_note.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-primary">编辑</a>
+                                                <form method="POST" action="admin/delete_note.php?id=<?php echo $note['id']; ?>" style="display: inline;">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定删除此笔记吗？')">删除</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+	
+    <script src="js/bootstrap.bundle.min.js"></script>
+    <script>
+       function isMobile() {
+         return /Mobi|Android|iPhone/i.test(navigator.userAgent);
+       }
+       isMobile()
+       if(isMobile()==true){
+       	document.querySelector('#an').style.display = 'block'
+       }else{
+       	document.querySelector('#an').style.display = 'none'
+       }
+       //这里结束
+       function toggleSidebar() {
+           const sidebar = document.querySelector('.sidebar');
+           const mainContent = document.querySelector('.main-content');
+           sidebar.classList.toggle('active');
+           mainContent.classList.toggle('active');
+       }
+	   
+
+        // 点击页面其他地方收起侧边栏
+        document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('click', function(event) {
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                const toggleButton = document.querySelector('.toggle-sidebar');
+
+                if (!sidebar.contains(event.target) && !toggleButton.contains(event.target) && window.innerWidth <= 768) {
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+
+        // 点击侧边栏中的链接时收起侧边栏
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.querySelector('.sidebar');
+                    const mainContent = document.querySelector('.main-content');
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\settings.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\view.php ======= 
+ 
+<?php
+session_start();
+include('includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+$id = $_GET['id'] ?? null;
+
+// 检查笔记是否存在
+$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE id = ?");
+$stmt->execute([$id]);
+$note = $stmt->fetch();
+
+if (!$note) {
+    die("笔记不存在");
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>查看笔记 - PZIOT笔记网</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico)" type="image/x-icon">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-12">
+                <h1>查看笔记</h1>
+                <a href="knowledge/index.php" class="btn btn-secondary">返回知识库</a>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="mb-0"><?php echo htmlspecialchars($note['title']); ?></h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text"><?php echo htmlspecialchars($note['content']); ?></p>
+                        <?php if (!empty($note['images'])): ?>
+                            <?php foreach (json_decode($note['images'], true) as $image): ?>
+                                <img src="<?php echo $image; ?>" alt="笔记图片" class="img-fluid rounded mb-2" style="max-height: 500px;">
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        <?php if (!empty($note['files'])): ?>
+                            <div class="mt-2">
+                                <?php foreach (json_decode($note['files'], true) as $file): ?>
+                                    <a href="knowledge/uploads/files/<?php echo basename($file); ?>" class="btn btn-sm btn-outline-primary" download>下载文件</a>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                        <div class="d-flex justify-content-between mt-2">
+                            <small class="text-muted">创建者: 
+                                <?php
+                                $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+                                $userStmt->execute([$note['user_id']]);
+                                $user = $userStmt->fetch();
+                                echo htmlspecialchars($user['username']);
+                                ?>
+                            </small>
+                            <div>
+                                <?php if (isset($_SESSION['user_id']) && $_SESSION['user_id'] == $note['user_id']): ?>
+                                    <a href="knowledge/delete.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定删除此笔记吗？')">删除</a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\view.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\admin\dashboard.php ======= 
+ 
+<?php
+include('../includes/config.php');
+
+// 检查用户是否登录且为管理员
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    header("Location: ../login.php");
+    exit();
+}
+
+// 获取用户统计
+$stmt = $pdo->query("SELECT COUNT(*) FROM users");
+$user_count = $stmt->fetchColumn();
+
+// 获取笔记统计
+$stmt = $pdo->query("SELECT COUNT(*) FROM notes");
+$note_count = $stmt->fetchColumn();
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理面板 - 局域网笔记协作系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-12">
+                <h1>管理面板</h1>
+                <a href="users.php" class="btn btn-primary mt-3">用户管理</a>
+                <a href="settings.php" class="btn btn-secondary mt-3">系统设置</a>
+                <a href="../../logout.php" class="btn btn-danger mt-3">退出登录</a>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h2 class="card-title"><?php echo $user_count; ?></h2>
+                        <p class="card-text">总用户数</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h2 class="card-title"><?php echo $note_count; ?></h2>
+                        <p class="card-text">总笔记数</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h2 class="card-title">0</h2>
+                        <p class="card-text">等待审核</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h2 class="card-title">0</h2>
+                        <p class="card-text">今日新增</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\admin\dashboard.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\admin\delete_note.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录且是 xiaoxuan 用户
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_xiaoxuan']) || !$_SESSION['is_xiaoxuan']) {
+    header("Location: ../index.php");
+    exit();
+}
+
+$id = $_GET['id'] ?? null;
+
+// 检查笔记是否存在
+$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE id = ?");
+$stmt->execute([$id]);
+$note = $stmt->fetch();
+
+if (!$note) {
+    die("笔记不存在");
+}
+
+// 删除笔记
+try {
+    $stmt = $pdo->prepare("DELETE FROM knowledge_notes WHERE id = ?");
+    $stmt->execute([$id]);
+    header("Location: ../settings.php");
+    exit();
+} catch (Exception $e) {
+    error_log("Failed to delete note: " . $e->getMessage());
+    die("删除笔记失败");
+} 
+======= ������D:\phpstudy_pro\note_cloud\admin\delete_note.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\admin\delete_user.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录且是 xiaoxuan 用户
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_xiaoxuan']) || !$_SESSION['is_xiaoxuan']) {
+    header("Location: ../index.php");
+    exit();
+}
+
+$id = $_GET['id'] ?? null;
+
+// 检查用户是否存在
+$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->execute([$id]);
+$user = $stmt->fetch();
+
+if (!$user) {
+    die("用户不存在");
+}
+
+// 删除用户
+try {
+    $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+    $stmt->execute([$id]);
+    header("Location: ../settings.php");
+    exit();
+} catch (Exception $e) {
+    error_log("Failed to delete user: " . $e->getMessage());
+    die("删除用户失败");
+} 
+======= ������D:\phpstudy_pro\note_cloud\admin\delete_user.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\admin\edit_note.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录且是 xiaoxuan 用户
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_xiaoxuan']) || !$_SESSION['is_xiaoxuan']) {
+    header("Location: ../index.php");
+    exit();
+}
+
+$id = $_GET['id'] ?? null;
+
+// 检查笔记是否存在
+$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE id = ?");
+$stmt->execute([$id]);
+$note = $stmt->fetch();
+
+if (!$note) {
+    die("笔记不存在");
+}
+
+// 处理笔记更新
+$update_error = '';
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $title = $_POST['title'];
+    $content = $_POST['content'];
+    
+    // 处理图片上传
+    $image_path = $note['image_path'];
+    if (!empty($_FILES['image']['name'])) {
+        $target_dir = '../uploads/images/';
+        $target_file = $target_dir . basename($_FILES["image"]["name"]);
+        $imageFileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+
+        // 允许的文件类型
+        $allowed_types = ['jpg', 'jpeg', 'png', 'gif'];
+
+        if (in_array($imageFileType, $allowed_types)) {
+            if (!is_dir($target_dir)) {
+                mkdir($target_dir, 0777, true);
+            }
+            if (move_uploaded_file($_FILES["image"]["tmp_name"], $target_file)) {
+                $image_path = $target_file;
+            } else {
+                $update_error = "图片上传失败";
+            }
+        } else {
+            $update_error = "只允许 JPG, JPEG, PNG, GIF 格式";
+        }
+    }
+
+    // 处理文件上传
+    $file_path = $note['file_path'];
+    if (!empty($_FILES['file']['name'])) {
+        $target_dir = '../uploads/files/';
+        $target_file = $target_dir . basename($_FILES["file"]["name"]);
+        $file_type = pathinfo($target_file, PATHINFO_EXTENSION);
+
+        if (!is_dir($target_dir)) {
+            mkdir($target_dir, 0777, true);
+        }
+        if (move_uploaded_file($_FILES["file"]["tmp_name"], $target_file)) {
+            $file_path = $target_file;
+        } else {
+            $update_error = "文件上传失败";
+        }
+    }
+
+    if (empty($title)) {
+        $update_error = '标题不能为空';
+    } else {
+        try {
+            $stmt = $pdo->prepare("UPDATE knowledge_notes SET title = ?, content = ?, image_path = ?, file_path = ? WHERE id = ?");
+            $stmt->execute([$title, $content, $image_path, $file_path, $id]);
+            header("Location: ../settings.php");
+            exit();
+        } catch (Exception $e) {
+            $update_error = '更新笔记时出错: ' . $e->getMessage();
+        }
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑笔记 - PZIOT笔记网</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="mb-0">编辑笔记</h3>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="title" class="form-label">标题</label>
+                                <input type="text" class="form-control" id="title" name="title" value="<?php echo htmlspecialchars($note['title']); ?>" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="content" class="form-label">内容</label>
+                                <textarea class="form-control" id="content" name="content" rows="5" required><?php echo htmlspecialchars($note['content']); ?></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="image" class="form-label">上传图片</label>
+                                <input type="file" class="form-control" id="image" name="image" accept="image/*">
+                                <?php if (!empty($note['image_path'])): ?>
+                                    <div class="mt-2">
+                                        <img src="<?php echo $note['image_path']; ?>" alt="当前图片" class="img-fluid rounded" style="max-height: 200px;">
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                            <div class="mb-3">
+                                <label for="file" class="form-label">上传文件</label>
+                                <input type="file" class="form-control" id="file" name="file">
+                                <?php if (!empty($note['file_path'])): ?>
+                                    <div class="mt-2">
+                                        <a href="<?php echo $note['file_path']; ?>" class="btn btn-sm btn-outline-primary" download>下载当前文件</a>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                            <button type="submit" class="btn btn-primary">更新笔记</button>
+                            <?php if (!empty($update_error)): ?>
+                                <div class="alert alert-danger mt-3"><?php echo $update_error; ?></div>
+                            <?php endif; ?>
+                        </form>
+                        <div class="text-center mt-3">
+                            <a href="../settings.php" class="btn btn-link">返回设置</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\admin\edit_note.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\admin\edit_user.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录且是 xiaoxuan 用户
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_xiaoxuan']) || !$_SESSION['is_xiaoxuan']) {
+    header("Location: ../index.php");
+    exit();
+}
+
+$id = $_GET['id'] ?? null;
+
+// 检查用户是否存在
+$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->execute([$id]);
+$user = $stmt->fetch();
+
+if (!$user) {
+    die("用户不存在");
+}
+
+// 处理用户更新
+$update_error = '';
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $username = $_POST['username'];
+    $email = $_POST['email'];
+    $role = $_POST['role'];
+    $approved = isset($_POST['approved']) ? 1 : 0;
+
+    // 检查用户名是否已存在
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ? AND id != ?");
+    $stmt->execute([$username, $id]);
+    
+    if ($stmt->fetchColumn() > 0) {
+        $update_error = "用户名已存在";
+    } else {
+        try {
+            $stmt = $pdo->prepare("UPDATE users SET username = ?, email = ?, role = ?, approved = ? WHERE id = ?");
+            $stmt->execute([$username, $email, $role, $approved, $id]);
+            header("Location: ../settings.php");
+            exit();
+        } catch (Exception $e) {
+            $update_error = '更新用户时出错: ' . $e->getMessage();
+        }
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑用户 - PZIOT笔记网</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6 col-sm-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="mb-0">编辑用户</h3>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            <div class="mb-3">
+                                <label for="username" class="form-label">用户名</label>
+                                <input type="text" class="form-control" id="username" name="username" value="<?php echo htmlspecialchars($user['username']); ?>" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="email" class="form-label">邮箱</label>
+                                <input type="email" class="form-control" id="email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="role" class="form-label">角色</label>
+                                <select class="form-select" id="role" name="role">
+                                    <option value="user" <?php echo $user['role'] === 'user' ? 'selected' : ''; ?>>普通用户</option>
+                                    <option value="admin" <?php echo $user['role'] === 'admin' ? 'selected' : ''; ?>>管理员</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">状态</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="approved" name="approved" <?php echo $user['approved'] ? 'checked' : ''; ?>>
+                                    <label class="form-check-label" for="approved">
+                                        已审批
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">更新用户</button>
+                            <?php if (!empty($update_error)): ?>
+                                <div class="alert alert-danger mt-3"><?php echo $update_error; ?></div>
+                            <?php endif; ?>
+                        </form>
+                        <div class="text-center mt-3">
+                            <a href="../settings.php" class="btn btn-link">返回设置</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\admin\edit_user.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\admin\index.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    header("Location: ../login.php");
+    exit();
+}
+
+// 获取所有笔记
+$notes = [];
+try {
+    $stmt = $pdo->query("SELECT * FROM notes ORDER BY created_at DESC");
+    $notes = $stmt->fetchAll();
+} catch (Exception $e) {
+    error_log("Failed to fetch notes: " . $e->getMessage());
+}
+
+// 获取所有用户
+$users = [];
+try {
+    $stmt = $pdo->query("SELECT * FROM users ORDER BY created_at DESC");
+    $users = $stmt->fetchAll();
+} catch (Exception $e) {
+    error_log("Failed to fetch users: " . $e->getMessage());
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>后台管理 - 局域网笔记协作系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            width: 200px;
+            background-color: #343a40;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            padding: 20px 0;
+        }
+        .sidebar .nav-link {
+            color: #dfe6e9;
+            padding: 10px 20px;
+            display: block;
+        }
+        .sidebar .nav-link:hover {
+            background-color: #485460;
+        }
+        .sidebar .nav-link.active {
+            background-color: #6c7ae0;
+        }
+        .main-content {
+            margin-left: 200px;
+            padding: 20px;
+        }
+        .note-card {
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-2 sidebar">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="index.php">笔记管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="users.php">用户管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="settings.php">系统设置</a>
+                    </li>
+                </ul>
+            </div>
+            <div class="col-md-10 main-content">
+                <h2>后台管理</h2>
+                <div class="row">
+                    <div class="col-md-12">
+                        <p>欢迎，<a href="index.php" class="text-decoration-none"><?php echo htmlspecialchars($_SESSION['username']); ?></a></p>
+                        <div class="mt-4">
+                            <!-- 笔记管理 -->
+                            <h3>笔记管理</h3>
+                            <a href="create_note.php" class="btn btn-primary">新建笔记</a>
+                            <div class="table-responsive mt-4">
+                                <table class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>标题</th>
+                                            <th>内容</th>
+                                            <th>创建时间</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($notes as $note): ?>
+                                            <tr>
+                                                <td><?php echo $note['id']; ?></td>
+                                                <td><?php echo htmlspecialchars($note['title']); ?></td>
+                                                <td><?php echo htmlspecialchars($note['content']); ?></td>
+                                                <td><?php echo $note['created_at']; ?></td>
+                                                <td>
+                                                    <a href="edit_note.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-primary">编辑</a>
+                                                    <a href="delete_note.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定删除此笔记吗？')">删除</a>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap 
+======= ������D:\phpstudy_pro\note_cloud\admin\index.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\admin\users.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否是管理员
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    header("Location: ../login.php");
+    exit();
+}
+
+// 获取所有用户
+$users = [];
+try {
+    $stmt = $pdo->query("SELECT * FROM users ORDER BY created_at DESC");
+    $users = $stmt->fetchAll();
+} catch (Exception $e) {
+    error_log("Failed to fetch users: " . $e->getMessage());
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户管理 - 局域网笔记协作系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            width: 200px;
+            background-color: #343a40;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            padding: 20px 0;
+        }
+        .sidebar .nav-link {
+            color: #dfe6e9;
+            padding: 10px 20px;
+            display: block;
+        }
+        .sidebar .nav-link:hover {
+            background-color: #485460;
+        }
+        .sidebar .nav-link.active {
+            background-color: #6c7ae0;
+        }
+        .main-content {
+            margin-left: 200px;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-2 sidebar">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="../index.php">我的笔记</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="users.php">用户管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="settings.php">系统设置</a>
+                    </li>
+                </ul>
+            </div>
+            <div class="col-md-10 main-content">
+                <h2>用户管理</h2>
+                <div class="table-responsive mt-4">
+                    <table class="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>用户名</th>
+                                <th>邮箱</th>
+                                <th>角色</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($users as $user): ?>
+                                <tr>
+                                    <td><?php echo $user['id']; ?></td>
+                                    <td><?php echo htmlspecialchars($user['username']); ?></td>
+                                    <td><?php echo htmlspecialchars($user['email']); ?></td>
+                                    <td><?php echo $user['role']; ?></td>
+                                    <td><?php echo $user['created_at']; ?></td>
+                                    <td>
+                                        <a href="edit_user.php?id=<?php echo $user['id']; ?>" class="btn btn-sm btn-primary">编辑</a>
+                                        <?php if ($user['username'] !== 'admin'): ?>
+                                            <a href="delete_user.php?id=<?php echo $user['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('确定删除此用户吗？')">删除</a>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\admin\users.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\desp\create.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit();
+}
+
+// 获取知识库分类
+$categories = [];
+try {
+    $stmt = $pdo->query("SELECT * FROM knowledge_categories ORDER BY name ASC");
+    $categories = $stmt->fetchAll();
+} catch (Exception $e) {
+    error_log("Failed to fetch knowledge categories: " . $e->getMessage());
+}
+
+// 检查是否有来自Kimi笔记助手的自动填充数据（在$_POST['chat_title']存在时）
+$auto_fill_title = '';
+$auto_fill_content = '';
+if (isset($_POST['chat_title'])) {
+    $auto_fill_title = $_POST['chat_title'];
+    $auto_fill_content = isset($_POST['chat_content']) ? $_POST['chat_content'] : '';
+}
+
+// 处理创建笔记的逻辑（仅在正常提交时）
+$create_error = '';
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['chat_title'])) {
+    // 安全地获取所有POST数据
+    $title = isset($_POST['title']) ? trim($_POST['title']) : '';
+    $content = isset($_POST['content']) ? trim($_POST['content']) : '';
+    $category_id = isset($_POST['category_id']) && $_POST['category_id'] !== '' ? $_POST['category_id'] : null;
+
+    // 删除图片和文件上传功能，但保留空数组以兼容数据库
+    $images = [];
+    $files = [];
+
+    if (empty($title)) {
+        $create_error = '标题不能为空';
+    } else {
+        try {
+            // 保留原有插入语句，空数组会自动转为JSON
+            $stmt = $pdo->prepare("INSERT INTO knowledge_notes (user_id, category_id, title, content, images, files) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->execute([
+                $_SESSION['user_id'],
+                $category_id,
+                $title,
+                $content,
+                json_encode($images),
+                json_encode($files)
+            ]);
+            // 修复：跳转到上级目录的index.php
+            header("Location: ../knowledge/index.php");
+            exit();
+        } catch (Exception $e) {
+            $create_error = '创建笔记时出错: ' . $e->getMessage();
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PZIOT笔记网 - 创建笔记</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico " type="image/x-icon">
+    <style>
+        .sidebar {
+            width: 200px;
+            background-color: #343a40;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            padding: 20px 0;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+            z-index: 1000;
+        }
+        .sidebar.collapsed {
+            transform: translateX(-200px);
+        }
+        .sidebar .nav-link {
+            color: #dfe6e9;
+            padding: 10px 20px;
+            display: block;
+        }
+        .sidebar .nav-link:hover {
+            background-color: #485460;
+        }
+        .sidebar .nav-link.active {
+            background-color: #6c7ae0;
+        }
+        .main-content {
+            margin-left: 200px;
+            padding: 20px;
+            transition: margin-left 0.3s ease;
+        }
+        .main-content.collapsed {
+            margin-left: 0;
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-200px);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-content.active {
+                margin-left: 200px;
+            }
+        }
+        .delete-btn {
+            margin-left: 10px;
+        }
+        /* 添加自动填充提示样式 */
+        .auto-fill-notice {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+        <div class="row">
+            <div class="col-md-2 sidebar">
+                <ul class="nav flex-column">
+                    <li class="nav-item active">
+                        <!-- 修复：跳转到上级目录的index.php -->
+                        <a class="nav-link" href="index.html">知识库</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../recycle.php">回收站</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../favorites.php">收藏</a>
+                    </li>
+					<li class="nav-item">
+					    <a class="nav-link" href="index.html" target="_blank" rel="noopener noreferrer">AI智能笔记</a>
+					</li>
+                    <?php if (isset($_SESSION['is_xiaoxuan']) && $_SESSION['is_xiaoxuan']): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="../settings.php">设置</a>
+                        </li>
+                    <?php endif; ?>
+                   <li class="nav-item">
+                         <a class="nav-link" href="../logout.php">退出登录</a>
+                     </li>
+                </ul>
+            </div>
+            <div class="col-md-10 main-content">
+                <h2>创建笔记</h2>
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <!-- 显示自动填充提示 -->
+                        <?php if (!empty($auto_fill_title)): ?>
+                            <div class="auto-fill-notice">
+                                ✨ 已智能从笔记助手中自动填充对话内容，请检查并完善信息后提交。
+                            </div>
+                        <?php endif; ?>
+                        
+                        <?php if (!empty($create_error)): ?>
+                            <div class="alert alert-danger"><?php echo htmlspecialchars($create_error); ?></div>
+                        <?php endif; ?>
+                        
+                        <form method="POST" action="">
+                            <div class="mb-3">
+                                <label for="title" class="form-label">标题</label>
+                                <input type="text" class="form-control" id="title" name="title" required 
+                                       value="<?php echo htmlspecialchars($auto_fill_title); ?>">
+                            </div>
+                            <div class="mb-3">
+                                <label for="content" class="form-label">内容</label>
+                                <textarea class="form-control" id="content" name="content" rows="10" required><?php 
+                                    echo htmlspecialchars($auto_fill_content); 
+                                ?></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="category_id" class="form-label">分类</label>
+                                <select class="form-select" id="category_id" name="category_id">
+                                    <option value="">选择分类</option>
+                                    <?php foreach ($categories as $category): ?>
+                                        <option value="<?php echo $category['id']; ?>"><?php echo htmlspecialchars($category['name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <!-- 删除图片上传功能 -->
+                            <!--
+                            <div class="mb-3">
+                                <label for="images" class="form-label">上传图片（多张）</label>
+                                <input type="file" class="form-control" id="images" name="images[]" multiple>
+                                <div id="imagePreviewContainer" class="mt-2"></div>
+                            </div>
+                            -->
+                            <!-- 删除文件上传功能 -->
+                            <!--
+                            <div class="mb-3">
+                                <label for="files" class="form-label">上传文件（多个）</label>
+                                <input type="file" class="form-control" id="files" name="files[]" multiple>
+                            </div>
+                            -->
+                            <button type="submit" class="btn btn-primary">创建笔记</button>
+                            <!-- 修复：跳转到上级目录的index.php -->
+                            <a href="index.html" class="btn btn-primary">返回</a>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const mainContent = document.querySelector('.main-content');
+            sidebar.classList.toggle('active');
+            mainContent.classList.toggle('active');
+        }
+		
+        // 点击页面其他地方收起侧边栏
+        document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('click', function(event) {
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                const toggleButton = document.querySelector('.toggle-sidebar');
+
+                if (!sidebar.contains(event.target) && !toggleButton.contains(event.target) && window.innerWidth <= 768) {
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+
+        // 点击侧边栏中的链接时收起侧边栏
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.querySelector('.sidebar');
+                    const mainContent = document.querySelector('.main-content');
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\desp\create.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\install\install.php ======= 
+ 
+<?php
+/**
+ * Note Cloud 安装程序 v2.6
+ * 修复清单：
+ * 1. 添加 ob_start() 防止 headers already sent
+ * 2. 在 header() 前清空缓冲区
+ * 3. 步骤3捕获所有数据库错误
+ * 4. 步骤4延迟清空 Session
+ * 5. 添加 MySQL 8.0 认证插件支持
+ */
+
+// ✅ 核心修复：必须在第一行开启输出缓冲
+ob_start();
+
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+session_start();
+
+// ==================== 核心配置 ====================
+define('BASE_PATH', dirname(__DIR__));
+define('INSTALL_PATH', __DIR__);
+define('CONFIG_DIR', BASE_PATH . '/includes/');
+define('CONFIG_PATH', CONFIG_DIR . 'config.php');
+define('LOCK_PATH', BASE_PATH . '/install.lock');
+
+// 检查是否已安装
+if (file_exists(LOCK_PATH)) {
+    exit('
+    <div style="text-align:center; padding:50px; font-family:sans-serif; background:#f8f9fa; border-radius:10px; max-width:600px; margin:50px auto;">
+        <h2>⚠️ 系统已安装</h2>
+        <p>如需重新安装，请删除网站根目录下的 <code>install.lock</code> 文件</p>
+        <a href="../login.php" class="btn btn-primary">返回首页</a>
+    </div>');
+}
+
+$step = filter_input(INPUT_GET, 'step', FILTER_VALIDATE_INT, ['options' => ['default' => 1, 'min_range' => 1, 'max_range' => 4]]);
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Note Cloud - 安装向导</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+        .container { max-width: 850px; margin: 0 auto; background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        .step-header { background: linear-gradient(45deg, #007bff, #0056b3); color: white; padding: 30px; text-align: center; }
+        .step-header h2 { margin: 0; font-size: 28px; font-weight: bold; }
+        .step-header p { margin: 10px 0 0; opacity: 0.9; }
+        .step-indicator { display: flex; justify-content: space-between; padding: 20px 30px; background: #f8f9fa; border-bottom: 1px solid #dee2e6; }
+        .step-item { flex: 1; text-align: center; padding: 10px; margin: 0 5px; background: #e9ecef; border-radius: 5px; font-weight: 500; }
+        .step-item.active { background: #007bff; color: white; }
+        .step-content { padding: 40px; }
+        .form-section { background: #f8f9fa; padding: 25px; border-radius: 10px; margin-bottom: 30px; border-left: 5px solid #007bff; }
+        .form-title { color: #007bff; font-weight: bold; font-size: 18px; margin-bottom: 20px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { font-weight: 600; margin-bottom: 8px; color: #495057; }
+        .form-control { padding: 12px; border-radius: 8px; border: 2px solid #dee2e6; transition: all 0.3s; }
+        .form-control:focus { border-color: #80bdff; box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); outline: none; }
+        .btn-primary, .btn-success, .btn-info { padding: 12px 30px; font-size: 16px; font-weight: 600; border-radius: 8px; transition: all 0.3s; }
+        .btn-primary:hover, .btn-success:hover, .btn-info:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        .btn-block { width: 100%; padding: 15px; font-size: 18px; }
+        .alert { border-radius: 8px; border: none; }
+        .validation-message { font-size: 13px; margin-top: 5px; padding: 8px; border-radius: 5px; display: none; }
+        .validation-success { color: #155724; background: #d4edda; display: block !important; }
+        .validation-error { color: #721c24; background: #f8d7da; display: block !important; }
+        .install-progress { padding: 20px 0; }
+        .log-container { min-height: 50px; max-height: 400px; overflow-y: auto; }
+        .log-container .alert { margin: 8px 0; padding: 10px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="step-indicator">
+            <div class="step-item <?= ($step >= 1 ? 'active' : '') ?>">1. 环境检测</div>
+            <div class="step-item <?= ($step >= 2 ? 'active' : '') ?>">2. 配置信息</div>
+            <div class="step-item <?= ($step >= 3 ? 'active' : '') ?>">3. 数据库安装</div>
+            <div class="step-item <?= ($step >= 4 ? 'active' : '') ?>">4. 安装完成</div>
+        </div>
+
+        <div class="step-content">
+            <?php
+            // ==================== 步骤1：环境检测 ====================
+            if ($step == 1):
+                $check = [];
+                $install = true;
+
+                if (version_compare(PHP_VERSION, '7.1.0', '<')) {
+                    $check['php'] = ['status' => 'danger', 'msg' => 'PHP版本过低（' . PHP_VERSION . '），需要7.1+'];
+                    $install = false;
+                } else {
+                    $check['php'] = ['status' => 'success', 'msg' => 'PHP版本 ' . PHP_VERSION];
+                }
+
+                if (extension_loaded('pdo') && extension_loaded('pdo_mysql')) {
+                    $check['pdo'] = ['status' => 'success', 'msg' => 'PDO_MYSQL 支持'];
+                } else {
+                    $check['pdo'] = ['status' => 'danger', 'msg' => 'PDO_MYSQL 未安装'];
+                    $install = false;
+                }
+
+                $dirs_to_check = [
+                    CONFIG_DIR => 'includes目录（配置文件）',
+                ];
+                
+                foreach ($dirs_to_check as $dir => $name) {
+                    if (!is_dir($dir)) {
+                        if (!@mkdir($dir, 0755, true)) {
+                            $check['dir_' . md5($dir)] = ['status' => 'danger', 'msg' => "$name 不存在且无法自动创建"];
+                            $install = false;
+                        } else {
+                            $check['dir_' . md5($dir)] = ['status' => 'success', 'msg' => "$name 已自动创建"];
+                        }
+                    } elseif (is_writable($dir)) {
+                        $check['dir_' . md5($dir)] = ['status' => 'success', 'msg' => "$name 可写"];
+                    } else {
+                        $check['dir_' . md5($dir)] = ['status' => 'warning', 'msg' => "$name 不可写（请手动设置755权限）"];
+                    }
+                }
+            ?>
+
+                <h3 class="mb-4"><i class="fas fa-cogs"></i> 环境检测</h3>
+                <p class="text-muted mb-4">请确保以下环境要求已满足</p>
+
+                <ul class="list-group mb-4">
+                    <?php foreach ($check as $item): ?>
+                    <li class="list-group-item">
+                        <?= htmlspecialchars($item['msg']) ?>
+                        <span class="badge badge-<?= $item['status'] ?> badge-pill">
+                            <?= $item['status'] == 'success' ? '✓' : ($item['status'] == 'warning' ? '!' : '✗') ?>
+                        </span>
+                    </li>
+                    <?php endforeach; ?>
+                </ul>
+
+                <?php if ($install): ?>
+                    <a href="?step=2" class="btn btn-success btn-block">检测通过，开始配置</a>
+                <?php else: ?>
+                    <div class="alert alert-danger">请解决以上问题后刷新页面重试</div>
+                <?php endif; ?>
+
+            <?php
+            // ==================== 步骤2：配置表单 ====================
+            elseif ($step == 2):
+                $db = $_SESSION['db'] ?? ['host' => 'localhost', 'port' => '3306', 'name' => 'note_cloud'];
+                $admin = $_SESSION['admin'] ?? ['username' => 'admin'];
+            ?>
+
+                <h3 class="mb-4"><i class="fas fa-wrench"></i> 配置信息</h3>
+                <p class="text-muted mb-4">请填写数据库和管理员信息</p>
+
+                <?php if (isset($_SESSION['install_error'])): ?>
+                    <div class="alert alert-danger">
+                        <strong>错误：</strong> <?= htmlspecialchars($_SESSION['install_error']) ?>
+                    </div>
+                    <?php unset($_SESSION['install_error']); ?>
+                <?php endif; ?>
+
+                <form method="post" action="?step=3&run=1" id="installForm">
+                    <!-- 数据库配置 -->
+                    <div class="form-section">
+                        <div class="form-title">📊 数据库设置</div>
+                        <div class="form-group">
+                            <label>数据库地址</label>
+                            <input type="text" class="form-control" name="db_host" value="<?= htmlspecialchars($db['host']) ?>" required placeholder="localhost">
+                        </div>
+                        <div class="form-group">
+                            <label>数据库端口</label>
+                            <input type="text" class="form-control" name="db_port" value="<?= htmlspecialchars($db['port']) ?>" required placeholder="3306">
+                        </div>
+                        <div class="form-group">
+                            <label>数据库用户名</label>
+                            <input type="text" class="form-control" name="db_user" value="<?= htmlspecialchars($db['user']) ?>" required>
+                        </div>
+                        <div class="form-group">
+                            <label>数据库密码</label>
+                            <input type="password" class="form-control" name="db_pass" value="<?= htmlspecialchars($db['pass'] ?? '') ?>" required>
+                            <div class="alert alert-warning" style="margin-top: 10px;">
+                                <strong>MySQL 8.0 用户注意：</strong><br>
+                                如果出现 2054 错误，请在安装前执行 SQL：<br>
+                                <code>ALTER USER '<?=htmlspecialchars($_POST['db_user']??'root')?>'@'localhost' IDENTIFIED WITH mysql_native_password BY '你的密码'; FLUSH PRIVILEGES;</code>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>数据库名称</label>
+                            <input type="text" class="form-control" name="db_name" value="<?= htmlspecialchars($db['name']) ?>" required placeholder="将自动创建">
+                        </div>
+                    </div>
+
+                    <!-- 管理员配置 -->
+                    <div class="form-section">
+                        <div class="form-title">👑 管理员账号</div>
+                        <div class="form-group">
+                            <label>用户名</label>
+                            <input type="text" class="form-control" name="admin_user" value="<?= htmlspecialchars($admin['username']) ?>" required pattern="[a-zA-Z0-9_]{3,20}">
+                            <small class="text-muted">3-20位字母、数字或下划线</small>
+                        </div>
+                        <div class="form-group">
+                            <label>密码</label>
+                            <input type="password" class="form-control" name="admin_pass" id="adminPass" required minlength="6">
+                            <div class="validation-message" id="passwordMessage">至少6位字符</div>
+                        </div>
+                        <div class="form-group">
+                            <label>确认密码</label>
+                            <input type="password" class="form-control" name="admin_pass2" id="adminPass2" required minlength="6">
+                            <div class="validation-message" id="password2Message"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>邮箱</label>
+                            <input type="email" class="form-control" name="admin_email" value="<?= htmlspecialchars($admin['email']) ?>" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-success btn-block" id="submitBtn">
+                        ▶ 开始安装
+                    </button>
+                </form>
+
+                <script>
+                // 密码验证脚本
+                const password = document.getElementById('adminPass');
+                const password2 = document.getElementById('adminPass2');
+                const passwordMessage = document.getElementById('passwordMessage');
+                const password2Message = document.getElementById('password2Message');
+                const submitBtn = document.getElementById('submitBtn');
+
+                function validateForm() {
+                    const pwd1 = password.value;
+                    const pwd2 = password2.value;
+                    let isValid = true;
+
+                    // 密码长度
+                    if (pwd1.length > 0 && pwd1.length < 6) {
+                        passwordMessage.textContent = '❌ 密码长度至少6位';
+                        passwordMessage.className = 'validation-message validation-error';
+                        isValid = false;
+                    } else if (pwd1.length >= 6) {
+                        passwordMessage.textContent = '✓ 密码强度符合要求';
+                        passwordMessage.className = 'validation-message validation-success';
+                    } else {
+                        passwordMessage.style.display = 'none';
+                    }
+
+                    // 密码匹配
+                    if (pwd2.length > 0 && pwd1 !== pwd2) {
+                        password2Message.textContent = '❌ 两次密码不一致';
+                        password2Message.className = 'validation-message validation-error';
+                        isValid = false;
+                    } else if (pwd2.length > 0 && pwd1 === pwd2) {
+                        password2Message.textContent = '✓ 密码匹配';
+                        password2Message.className = 'validation-message validation-success';
+                    } else {
+                        password2Message.style.display = 'none';
+                    }
+
+                    submitBtn.disabled = !isValid;
+                    return isValid;
+                }
+
+                password.addEventListener('input', validateForm);
+                password2.addEventListener('input', validateForm);
+
+                document.getElementById('installForm').addEventListener('submit', function(e) {
+                    if (!validateForm()) {
+                        e.preventDefault();
+                        alert('请检查密码设置是否正确！');
+                        return false;
+                    }
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '⏳ 安装中，请稍候...';
+                });
+                </script>
+
+            <?php
+            // ==================== 步骤3：执行安装（完全修复版） ====================
+            elseif ($step == 3):
+                // ✅ 先显示加载界面
+                ?>
+                <div class="install-progress">
+                    <h3 class="mb-4"><i class="fas fa-spinner fa-spin"></i> 正在安装系统...</h3>
+                    <div class="progress mb-3" style="height:30px; border-radius:8px;">
+                        <div id="installProgress" class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                             style="width:5%; font-size:14px; font-weight:bold;">
+                            准备中...
+                        </div>
+                    </div>
+                    <div id="installLog" class="log-container"></div>
+                </div>
+                <?php
+                
+                // ✅ 安全的 $log 函数定义
+                $log = function($msg, $type = 'info') {
+                    $icon = $type == 'success' ? '✓' : ($type == 'error' ? '✗' : '→');
+                    $safeMsg = json_encode($icon . ' ' . $msg, JSON_UNESCAPED_UNICODE);
+                    echo "<script>
+                        try {
+                            var div = document.createElement('div');
+                            div.className = 'alert alert-{$type}';
+                            div.style.margin = '8px 0';
+                            div.style.padding = '10px';
+                            div.style.fontSize = '14px';
+                            div.innerHTML = {$safeMsg};
+                            var logContainer = document.getElementById('installLog');
+                            if(logContainer) {
+                                logContainer.appendChild(div);
+                                logContainer.scrollTop = logContainer.scrollHeight;
+                            }
+                        } catch(e) { console.error('日志错误:', e); }
+                    </script>";
+                    ob_flush(); flush();
+                };
+
+                // ✅ 实际安装逻辑
+                if (isset($_GET['run']) && $_GET['run'] == '1') {
+                    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                        header('Location: ?step=2');
+                        exit;
+                    }
+
+                    // 验证密码
+                    if ($_POST['admin_pass'] !== $_POST['admin_pass2']) {
+                        $log('❌ 两次密码不一致', 'error');
+                        echo '<a href="?step=2" class="btn btn-info btn-block mt-4">返回修改</a>';
+                        exit;
+                    }
+
+                    try {
+                        // ✅ MySQL 8.0 认证插件
+                        $dsn = "mysql:host={$_POST['db_host']};port={$_POST['db_port']};charset=utf8mb4;auth_plugin=mysql_native_password";
+                        $pdo = new PDO($dsn, $_POST['db_user'], $_POST['db_pass'], [
+                            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+                        ]);
+
+                        $dbName = $_POST['db_name'];
+                        $pdo->exec("CREATE DATABASE IF NOT EXISTS `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+                        $log('✓ 数据库创建成功', 'success');
+
+                        $pdo->beginTransaction();
+                        $pdo->exec("USE `$dbName`");
+                        
+                        // 创建数据表
+                        try {
+                            createTables($pdo, $log);
+                        } catch (Exception $e) {
+                            throw new Exception("数据表创建失败: " . $e->getMessage());
+                        }
+
+                        // 创建管理员
+                        $passwordHash = password_hash($_POST['admin_pass'], PASSWORD_BCRYPT, ['cost' => 12]);
+                        $stmt = $pdo->prepare("INSERT INTO users (username, password_hash, email, role, status, approved, created_at) VALUES (?, ?, ?, 'admin', 1, 1, NOW())");
+                        $stmt->execute([$_POST['admin_user'], $passwordHash, $_POST['admin_email']]);
+                        $log('✓ 管理员账号创建成功', 'success');
+
+                        $pdo->commit();
+
+                        // ✅ 生成包含 PDO 的配置文件
+                        if (!is_dir(CONFIG_DIR)) {
+                            mkdir(CONFIG_DIR, 0755, true);
+                        }
+                        
+                        $configContent = '<?php' . "\n";
+                        $configContent .= '/* Note Cloud 数据库配置 - 自动生成于 ' . date('Y-m-d H:i:s') . ' */' . "\n";
+                        $configContent .= "if (!defined('IN_SYSTEM')) exit('Access Denied');\n\n";
+                        $configContent .= '$dbconfig = array(' . "\n";
+                        $configContent .= "    'host' => '" . addslashes($_POST['db_host']) . "',\n";
+                        $configContent .= "    'port' => " . intval($_POST['db_port']) . ",\n";
+                        $configContent .= "    'user' => '" . addslashes($_POST['db_user']) . "',\n";
+                        $configContent .= "    'pwd' => '" . addslashes($_POST['db_pass']) . "',\n";
+                        $configContent .= "    'dbname' => '" . addslashes($_POST['db_name']) . "'\n";
+                        $configContent .= ');' . "\n\n";
+                        $configContent .= <<<'PDO_CODE'
+                        
+                        // 自动创建 PDO 数据库连接（所有页面直接使用 $pdo）
+                        try {
+                            $pdo = new PDO(
+                                "mysql:host={$dbconfig['host']};port={$dbconfig['port']};dbname={$dbconfig['dbname']};charset=utf8mb4",
+                                $dbconfig['user'],
+                                $dbconfig['pwd'],
+                                [
+                                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                                    PDO::ATTR_EMULATE_PREPARES => false,
+                                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
+                                ]
+                            );
+                        } catch (PDOException $e) {
+                            error_log("PDO Connection Error: " . $e->getMessage());
+                            die('<div style="text-align:center; padding:50px;"><h2>⚠️ 系统维护中</h2><p>数据库连接出现问题</p></div>');
+                        }
+                        
+                        PDO_CODE;
+                        
+                        if (file_put_contents(CONFIG_PATH, $configContent) === false) {
+                            throw new Exception('配置文件写入失败');
+                        }
+                        chmod(CONFIG_PATH, 0644);
+                        $log('✓ 配置文件创建成功', 'success');
+
+                        // ✅ 创建包含安装信息的锁文件
+                        $installInfo = [
+                            'installed' => true,
+                            'version' => '1.0.0',
+                            'installed_at' => date('Y-m-d H:i:s'),
+                            'installed_by' => $_SERVER['REMOTE_ADDR'],
+                            'db_name' => $_POST['db_name'],
+                            'admin_user' => $_POST['admin_user']
+                        ];
+                        $lockContent = '<?php return ' . var_export($installInfo, true) . ';';
+                        if (file_put_contents(LOCK_PATH, $lockContent) === false) {
+                            throw new Exception('无法创建安装锁文件');
+                        }
+                        $log('✓ 安装锁创建成功', 'success');
+
+                        // ✅ 关键修复：清空缓冲区再跳转
+                        ob_end_clean();
+                        echo "<script>window.location.href='?step=4';</script>";  // ✅ JS跳转，不受输出限制
+                        exit;
+
+                    } catch (PDOException $e) {
+                        if (isset($pdo) && $pdo->inTransaction()) {
+                            $pdo->rollBack();
+                        }
+                        $log('✗ 数据库错误: ' . $e->getMessage(), 'error');
+                        echo '<a href="?step=2" class="btn btn-info btn-block mt-4">返回修改配置</a>';
+                        exit;
+                    } catch (Exception $e) {
+                        $log('✗ 安装失败: ' . $e->getMessage(), 'error');
+                        echo '<a href="?step=2" class="btn btn-info btn-block mt-4">返回修改配置</a>';
+                        exit;
+                    }
+                }
+            ?>
+
+            <?php
+            // ==================== 步骤4：完成 ====================
+            elseif ($step == 4):
+                if (!file_exists(LOCK_PATH)) {
+                    header('Location: ?step=1');
+                    exit;
+                }
+            
+                // ✅ 双重保险读取安装信息
+                $dbName = $_SESSION['db']['name'] ?? '未知';
+                $adminUser = $_SESSION['admin']['username'] ?? '未知';
+                $adminEmail = $_SESSION['admin']['email'] ?? '未知';
+                
+                // ✅ 从锁文件读取
+                $installInfo = @include(LOCK_PATH);
+                if (is_array($installInfo)) {
+                    $dbName = $installInfo['db_name'] ?? $dbName;
+                    $adminUser = $installInfo['admin_user'] ?? $adminUser;
+                }
+                ?>
+            
+                <h3 class="mb-4"><i class="fas fa-check-circle"></i> 🎉 安装完成</h3>
+                
+                <div class="alert alert-success">
+                    <h4>系统已成功安装！</h4>
+                    <ul class="mb-0">
+                        <li>数据库：<strong><?= htmlspecialchars($dbName) ?></strong></li>
+                        <li>管理员：<strong><?= htmlspecialchars($adminUser) ?></strong>（已自动审批）</li>
+                        <li>管理员邮箱：<strong><?= htmlspecialchars($adminEmail) ?></strong></li>
+                    </ul>
+                </div>
+            
+                <div class="card border-warning mb-4">
+                    <div class="card-header bg-warning text-white font-weight-bold">⚠️ 安全提醒</div>
+                    <div class="card-body">
+                        <ol class="mb-0">
+                            <li>请妥善保管管理员密码</li>
+                            <li><strong>建议立即删除 install/ 目录</strong></li>
+                            <li>配置文件已生成：<code>includes/config.php</code></li>
+                            <li>安装锁文件：<code><?= LOCK_PATH ?></code></li>
+                        </ol>
+                    </div>
+                </div>
+            
+                <div class="row">
+                    <div class="col-md-6">
+                        <a href="../" class="btn btn-primary btn-block">进入系统</a>
+                    </div>
+                    <div class="col-md-6">
+                        <a href="../login.php" class="btn btn-success btn-block">前往登录</a>
+                    </div>
+                </div>
+            
+                <?php
+                // ✅ 关键修复：在显示完成后再清空 session
+                unset($_SESSION['db'], $_SESSION['admin']);
+                ?>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+<?php
+/**
+ * ✅ 创建所有数据表（包含approved字段）
+ */
+function createTables(PDO $pdo, callable $log) {
+    $tables = [
+        // 用户表
+        "CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(255) NOT NULL UNIQUE,
+            password_hash VARCHAR(255) NOT NULL,
+            email VARCHAR(255) NOT NULL UNIQUE,
+            role VARCHAR(50) NOT NULL DEFAULT 'user',
+            status TINYINT(1) NOT NULL DEFAULT 1,
+            approved TINYINT(1) NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_username (username),
+            INDEX idx_email (email),
+            INDEX idx_role (role),
+            INDEX idx_status (status),
+            INDEX idx_approved (approved)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+        // 知识分类表
+        "CREATE TABLE IF NOT EXISTS knowledge_categories (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            user_id INT NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_id (user_id),
+            INDEX idx_name (name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+        // 标签表
+        "CREATE TABLE IF NOT EXISTS note_tags (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            user_id INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_id (user_id),
+            INDEX idx_name (name),
+            UNIQUE KEY uk_user_tag (user_id, name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+        // 知识标签表
+        "CREATE TABLE IF NOT EXISTS knowledge_note_tags (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            user_id INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_id (user_id),
+            INDEX idx_name (name),
+            UNIQUE KEY uk_user_tag (user_id, name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+        // 笔记表
+        "CREATE TABLE IF NOT EXISTS notes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            content LONGTEXT NOT NULL,
+            category_id INT DEFAULT NULL,
+            status TINYINT(1) DEFAULT 1,
+            is_deleted TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            deleted_at TIMESTAMP NULL DEFAULT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (category_id) REFERENCES knowledge_categories(id) ON DELETE SET NULL,
+            INDEX idx_user_id (user_id),
+            INDEX idx_category_id (category_id),
+            INDEX idx_status (status),
+            INDEX idx_created_at (created_at),
+            FULLTEXT idx_title_content (title, content)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+        // 知识笔记表
+        "CREATE TABLE IF NOT EXISTS knowledge_notes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            category_id INT DEFAULT NULL,
+            title VARCHAR(255) NOT NULL,
+            content LONGTEXT NOT NULL,
+            image_path VARCHAR(500) DEFAULT NULL,
+            file_path VARCHAR(500) DEFAULT NULL,
+            status TINYINT(1) DEFAULT 1,
+            view_count INT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (category_id) REFERENCES knowledge_categories(id) ON DELETE SET NULL,
+            INDEX idx_user_id (user_id),
+            INDEX idx_category_id (category_id),
+            INDEX idx_status (status),
+            INDEX idx_created_at (created_at),
+            FULLTEXT idx_title_content (title, content)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    ];
+
+    foreach ($tables as $sql) {
+        try {
+            $pdo->exec($sql);
+            if (preg_match('/CREATE TABLE IF NOT EXISTS\s+`?(\w+)`?/i', $sql, $matches)) {
+                $log("✓ 表 {$matches[1]} 创建成功", 'success');
+            }
+        } catch (PDOException $e) {
+            throw new Exception("创建表失败: " . $e->getMessage());
+        }
+    }
+} 
+======= ������D:\phpstudy_pro\note_cloud\install\install.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\knowledge\add_category.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit();
+}
+
+// 处理添加分类
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $name = $_POST['name'] ?? '';
+    
+    $userId = $_SESSION['user_id']; // 假设每个用户只能添加自己的分类
+
+    try {
+        // 插入分类信息到数据库
+        $stmt = $pdo->prepare("INSERT INTO knowledge_categories (name, user_id) VALUES (?, ?)");
+        $stmt->execute([$name, $userId]);
+        
+        // 添加成功后，重定向分类管理页面
+        header("Location: ../knowledge/categories.php");
+        exit();
+    } catch (Exception $e) {
+        error_log("Failed to add category: " . $e->getMessage());
+        // 显示错误信息（在生产环境中可能需要更优雅地处理错误显示）
+        echo "添加分类失败：" . $e->getMessage();
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PZIOT笔记网</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico)" type="image/x-icon">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-sm-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="mb-0">添加新分类</h3>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">分类名称</label>
+                                <input type="text" class="form-control" id="name" name="name" value="<?php echo htmlspecialchars($name ?? ''); ?>" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">添加</button>
+                            <a href="categories.php" class="btn btn-secondary">返回</a>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\knowledge\add_category.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\knowledge\categories.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit();
+}
+
+// 获取分类
+$categories = [];
+try {
+    if (isset($_SESSION['is_xiaoxuan']) && $_SESSION['is_xiaoxuan']) {
+    $stmt = $pdo->query("SELECT * FROM knowledge_categories ORDER BY name ASC");
+} else {
+    $stmt = $pdo->prepare("SELECT * FROM knowledge_categories WHERE user_id = ? ORDER BY name ASC");
+    $stmt->execute([$_SESSION['user_id']]);
+}
+
+$categories = $stmt->fetchAll();
+}
+ catch (Exception $e) {
+    error_log("Failed to fetch categories: " . $e->getMessage());
+}
+
+// 处理删除分类
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_category'])) {
+    $categoryId = $_POST['category_id'];
+    try {
+        if (isset($_SESSION['is_xiaoxuan']) && $_SESSION['is_xiaoxuan']) {
+    $stmt = $pdo->prepare("DELETE FROM knowledge_categories WHERE id = ?");
+    $stmt->execute([$categoryId]);
+} else {
+    $stmt = $pdo->prepare("DELETE FROM knowledge_categories WHERE id = ? AND user_id = ?");
+    $stmt->execute([$categoryId, $_SESSION['user_id']]);
+}
+        header("Location: categories.php");
+        exit();
+    }
+     catch (Exception $e) {
+        error_log("Failed to delete category: " . $e->getMessage());
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>	
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PZIOT笔记网</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico)" type="image/x-icon">
+    <style>
+        .justify-content-between {
+            display:flex;
+            justify-content: space-between !important;
+        }
+        .width{
+            width:20%
+        }
+		
+    </style> 
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-sm-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h3 class="mb-">管理分类</h3>
+                        <div class="justify-content-between ">
+                            <a href="index.php" class="btn btn-primary">返回</a>
+                            <a href="add_category.php" class="btn btn-primary">添加分类</a>
+                        </div>
+                        
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>名称</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($categories as $category): ?>
+                                        <tr>
+                                            <td><?php echo $category['id']; ?></td>
+                                            <td><?php echo htmlspecialchars($category['name']); ?></td>
+                                            <td>
+                                                <form method="POST" action="" style="display: inline;">
+                                                    <input type="hidden" name="category_id" value="<?php echo $category['id']; ?>">
+                                                    <input type="hidden" name="delete_category" value="1">
+                                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('确定删除此分类吗？')">删除</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\knowledge\categories.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\knowledge\create.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit();
+}
+
+// 获取知识库分类
+$categories = [];
+try {
+    $stmt = $pdo->query("SELECT * FROM knowledge_categories ORDER BY name ASC");
+    $categories = $stmt->fetchAll();
+} catch (Exception $e) {
+    error_log("Failed to fetch knowledge categories: " . $e->getMessage());
+}
+
+// 处理创建笔记的逻辑
+$create_error = '';
+$content = isset($_POST['content']) ? nl2br($_POST['content']) : '';
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $title = $_POST['title'];
+    $content = $_POST['content'];
+    $category_id = $_POST['category_id'] ?? null;
+
+    // 处理图片上传
+    $images = [];
+    if (!empty($_FILES['images']['name'])) {
+        $target_dir = "uploads/images/"; // 直接存储在uploads/images/
+        if (!is_dir($target_dir)) {
+            mkdir($target_dir, 0777, true);
+        }
+        foreach ($_FILES['images']['name'] as $index => $name) {
+            $target_file = $target_dir . basename($name);
+            $imageFileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+            $allowed_types = ['jpg', 'jpeg', 'png', 'gif'];
+            if (in_array($imageFileType, $allowed_types)) {
+                if (move_uploaded_file($_FILES["images"]["tmp_name"][$index], $target_file)) {
+                    $images[] = $target_file;
+                }
+            }
+        }
+    }
+
+    // 处理文件上传
+    $files = [];
+    if (!empty($_FILES['files']['name'])) {
+        $target_dir = "uploads/files/"; // 直接存储在uploads/files/
+        if (!is_dir($target_dir)) {
+            mkdir($target_dir, 0777, true);
+        }
+        foreach ($_FILES['files']['name'] as $index => $name) {
+            $target_file = $target_dir . basename($name);
+            if (move_uploaded_file($_FILES["files"]["tmp_name"][$index], $target_file)) {
+                $files[] = $target_file;
+            }
+        }
+    }
+
+    if (empty($title)) {
+        $create_error = '标题不能为空';
+    } else {
+        try {
+            $stmt = $pdo->prepare("INSERT INTO knowledge_notes (user_id, category_id, title, content, images, files) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->execute([
+                $_SESSION['user_id'],
+                $category_id,
+                $title,
+                $content,
+                json_encode($images),
+                json_encode($files)
+            ]);
+            header("Location: index.php");
+            exit();
+        } catch (Exception $e) {
+            $create_error = '创建笔记时出错: ' . $e->getMessage();
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PZIOT笔记网</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico)" type="image/x-icon">
+    <style>
+        .sidebar {
+            width: 200px;
+            background-color: #343a40;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            padding: 20px 0;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+            z-index: 1000;
+        }
+        .sidebar.collapsed {
+            transform: translateX(-200px);
+        }
+        .sidebar .nav-link {
+            color: #dfe6e9;
+            padding: 10px 20px;
+            display: block;
+        }
+        .sidebar .nav-link:hover {
+            background-color: #485460;
+        }
+        .sidebar .nav-link.active {
+            background-color: #6c7ae0;
+        }
+        .main-content {
+            margin-left: 200px;
+            padding: 20px;
+            transition: margin-left 0.3s ease;
+        }
+        .main-content.collapsed {
+            margin-left: 0;
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-200px);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-content.active {
+                margin-left: 200px;
+            }
+        }
+        .image-preview {
+            max-width: 100%;
+            max-height: 200px;
+            margin-bottom: 10px;
+        }
+        .delete-btn {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+        <div class="row">
+            <div class="col-md-2 sidebar">
+                <ul class="nav flex-column">
+                    <li class="nav-item active">
+                        <a class="nav-link" href="index.php">知识库</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../recycle.php">回收站</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../favorites.php">收藏</a>
+                    </li>
+					<li class="nav-item">
+					    <a class="nav-link" href="desp/index.html" target="_blank" rel="noopener noreferrer">ai</a>
+					</li>
+                    <?php if (isset($_SESSION['is_xiaoxuan']) && $_SESSION['is_xiaoxuan']): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="../settings.php">设置</a>
+                        </li>
+                    <?php endif; ?>
+                   <li class="nav-item">
+                         <a class="nav-link" href="../logout.php">退出登录</a>
+                     </li>
+                </ul>
+            </div>
+            <div class="col-md-10 main-content">
+                <h2>创建笔记</h2>
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <?php if (!empty($create_error)): ?>
+                            <div class="alert alert-danger"><?php echo $create_error; ?></div>
+                        <?php endif; ?>
+                        <form method="POST" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="title" class="form-label">标题</label>
+                                <input type="text" class="form-control" id="title" name="title" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="content" class="form-label">内容</label>
+                                <textarea class="form-control" id="content" name="content" rows="10" required></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="category_id" class="form-label">分类</label>
+                                <select class="form-select" id="category_id" name="category_id">
+                                    <option value="">选择分类</option>
+                                    <?php foreach ($categories as $category): ?>
+                                        <option value="<?php echo $category['id']; ?>"><?php echo htmlspecialchars($category['name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="images" class="form-label">上传图片（多张）</label>
+                                <input type="file" class="form-control" id="images" name="images[]" multiple>
+                                <div id="imagePreviewContainer" class="mt-2"></div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="files" class="form-label">上传文件（多个）</label>
+                                <input type="file" class="form-control" id="files" name="files[]" multiple>
+                            </div>
+                            <button type="submit" class="btn btn-primary">创建笔记</button>
+                             <a href="index.php" class="btn btn-primary">返回</a>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const mainContent = document.querySelector('.main-content');
+            sidebar.classList.toggle('active');
+            mainContent.classList.toggle('active');
+        }
+		
+
+        // 图片预览功能
+        document.getElementById('images').addEventListener('change', function(e) {
+            const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+            imagePreviewContainer.innerHTML = '';
+            
+            for (let i = 0; i < this.files.length; i++) {
+                const file = this.files[i];
+                if (file.type.match('image.*')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.className = 'img-fluid image-preview';
+                        img.alt = '预览图片';
+                        imagePreviewContainer.appendChild(img);
+                    }
+                    reader.readAsDataURL(file);
+                }
+            }
+        });
+		let touchStartX = 0;
+		let touchEndX = 0;
+        // 点击页面其他地方收起侧边栏
+        document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('click', function(event) {
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                const toggleButton = document.querySelector('.toggle-sidebar');
+
+                if (!sidebar.contains(event.target) && !toggleButton.contains(event.target) && window.innerWidth <= 768) {
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+
+        // 点击侧边栏中的链接时收起侧边栏
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.querySelector('.sidebar');
+                    const mainContent = document.querySelector('.main-content');
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\knowledge\create.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\knowledge\delete.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit();
+}
+
+$id = $_GET['id'] ?? null;
+
+// 检查笔记是否存在并属于当前用户
+$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE id = ? AND user_id = ?");
+$stmt->execute([$id, $_SESSION['user_id']]);
+$note = $stmt->fetch();
+
+if (!$note) {
+    die("笔记不存在或您无权限操作");
+}
+
+// 将笔记移动到回收站
+$stmt = $pdo->prepare("UPDATE knowledge_notes SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?");
+$stmt->execute([$id]);
+
+header("Location: index.php");
+exit(); 
+======= ������D:\phpstudy_pro\note_cloud\knowledge\delete.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\knowledge\edit.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit();
+}
+
+$id = $_GET['id'] ?? null;
+
+// 检查笔记是否存在并属于当前用户
+$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE id = ? AND user_id = ?");
+$stmt->execute([$id, $_SESSION['user_id']]);
+$note = $stmt->fetch();
+
+if (!$note) {
+    die("笔记不存在或您无权限访问");
+}
+
+// 获取知识库分类
+$categories = [];
+$content = isset($_POST['content']) ? nl2br($_POST['content']) : '';
+try {
+    $stmt = $pdo->query("SELECT * FROM knowledge_categories ORDER BY name ASC");
+    $categories = $stmt->fetchAll();
+} catch (Exception $e) {
+    error_log("Failed to fetch knowledge categories: " . $e->getMessage());
+}
+
+// 处理更新笔记的逻辑
+$update_error = '';
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['title'])) {
+    $title = $_POST['title'];
+    $content = $_POST['content'];
+    $category_id = isset($_POST['category_id']) && !empty($_POST['category_id']) ? (int)$_POST['category_id'] : null;
+
+    // 获取已有的图片和文件
+    $existing_images = json_decode($note['images'], true) ?? [];
+    $existing_files = json_decode($note['files'], true) ?? [];
+
+    // 处理图片删除
+    if (isset($_POST['delete_images'])) {
+        foreach ($_POST['delete_images'] as $imageIndex) {
+            if (isset($existing_images[$imageIndex])) {
+                // 删除本地文件
+                if (file_exists($existing_images[$imageIndex])) {
+                    unlink($existing_images[$imageIndex]);
+                }
+                // 从数组中移除
+                unset($existing_images[$imageIndex]);
+            }
+        }
+        $existing_images = array_values($existing_images);
+    }
+
+    // 处理文件删除
+    if (isset($_POST['delete_files'])) {
+        foreach ($_POST['delete_files'] as $fileIndex) {
+            if (isset($existing_files[$fileIndex])) {
+                // 删除本地文件
+                if (file_exists($existing_files[$fileIndex])) {
+                    unlink($existing_files[$fileIndex]);
+                }
+                // 从数组中移除
+                unset($existing_files[$fileIndex]);
+            }
+        }
+        $existing_files = array_values($existing_files);
+    }
+
+    // 处理图片上传
+    $images = [];
+    if (!empty($_FILES['images']['name'])) {
+        $target_dir = "uploads/images/"; // 直接存储在uploads/images/
+        if (!is_dir($target_dir)) {
+            mkdir($target_dir, 0777, true);
+        }
+        foreach ($_FILES['images']['name'] as $index => $name) {
+            $target_file = $target_dir . basename($name);
+            $imageFileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+            $allowed_types = ['jpg', 'jpeg', 'png', 'gif'];
+            if (in_array($imageFileType, $allowed_types)) {
+                if (move_uploaded_file($_FILES["images"]["tmp_name"][$index], $target_file)) {
+                    $images[] = $target_file;
+                }
+            }
+        }
+    }
+
+    // 处理文件上传
+    $files = [];
+    if (!empty($_FILES['files']['name'])) {
+        $target_dir = "uploads/files/"; // 直接存储在uploads/files/
+        if (!is_dir($target_dir)) {
+            mkdir($target_dir, 0777, true);
+        }
+        foreach ($_FILES['files']['name'] as $index => $name) {
+            $target_file = $target_dir . basename($name);
+            if (move_uploaded_file($_FILES["files"]["tmp_name"][$index], $target_file)) {
+                $files[] = $target_file;
+            }
+        }
+    }
+
+    // 合并已有的和新上传的图片和文件
+    $images = array_merge($existing_images, $images);
+    $files = array_merge($existing_files, $files);
+
+    if (empty($title)) {
+        $update_error = '标题不能为空';
+    } else {
+        try {
+            $stmt = $pdo->prepare("UPDATE knowledge_notes SET title = ?, content = ?, category_id = ?, images = ?, files = ? WHERE id = ?");
+            $stmt->execute([$title, $content, $category_id, json_encode($images), json_encode($files), $id]);
+
+            header("Location: view.php?id=$id");
+            exit();
+        } catch (Exception $e) {
+            $update_error = '更新笔记时出错: ' . $e->getMessage();
+        }
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑笔记 - PZIOT笔记网</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico" type="image/x-icon">
+    <style>
+        .sidebar {
+            width: 200px;
+            background-color: #343a40;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            padding: 20px 0;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+            z-index: 1000;
+        }
+        .sidebar.collapsed {
+            transform: translateX(-200px);
+        }
+        .sidebar .nav-link {
+            color: #dfe6e9;
+            padding: 10px 20px;
+            display: block;
+        }
+        .sidebar .nav-link:hover {
+            background-color: #485460;
+        }
+        .sidebar .nav-link.active {
+            background-color: #6c7ae0;
+        }
+        .main-content {
+            margin-left: 200px;
+            padding: 20px;
+            transition: margin-left 0.3s ease;
+        }
+        .main-content.collapsed {
+            margin-left: 0;
+        }
+        .toggle-sidebar {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1001;
+            display: none;
+            background-color: #343a40;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-200px);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .toggle-sidebar {
+                display: block;
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-content.active {
+                margin-left: 200px;
+            }
+        }
+        .image-preview {
+            max-width: 100%;
+            max-height: 200px;
+            margin-bottom: 10px;
+        }
+        .delete-btn {
+            margin-left: 10px;
+        }
+        .grayed-out {
+            opacity: 0.5;
+            filter: grayscale(100%);
+        }
+    </style>
+</head>
+<body>
+        <div class="row">
+            <div class="col-md-2 sidebar">
+                <ul class="nav flex-column">
+                    <li class="nav-item active">
+                        <a class="nav-link" href="index.php">知识库</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../recycle.php">回收站</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../favorites.php">收藏</a>
+                    </li>
+                    <?php if (isset($_SESSION['is_xiaoxuan']) && $_SESSION['is_xiaoxuan']): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="../settings.php">设置</a>
+                        </li>
+                    <?php endif; ?>
+                </ul>
+            </div>
+            <div class="col-md-10 main-content">
+                <h2>编辑笔记</h2>
+				<button class="toggle-sidebar d-lg-none" onclick="toggleSidebar()" style="left: 85%;" id="an">☰</button>
+				<br/>
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <?php if (!empty($update_error)): ?>
+                            <div class="alert alert-danger"><?php echo $update_error; ?></div>
+                        <?php endif; ?>
+                        <form method="POST" enctype="multipart/form-data" id="editForm">
+                            <div class="mb-3">
+                                <label for="title" class="form-label">标题</label>
+                                <input type="text" class="form-control" id="title" name="title" value="<?php echo htmlspecialchars($note['title']); ?>" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="content" class="form-label">内容</label>
+                                <textarea class="form-control" id="content" name="content" rows="10" required><?php echo htmlspecialchars($note['content']); ?></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="category_id" class="form-label">分类</label>
+                                <select class="form-select" id="category_id" name="category_id">
+                                    <option value="">选择分类</option>
+                                    <?php foreach ($categories as $category): ?>
+                                        <option value="<?php echo $category['id']; ?>" <?php echo $note['category_id'] == $category['id'] ? 'selected' : ''; ?>>
+                                            <?php echo htmlspecialchars($category['name']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="images" class="form-label">上传图片（多张）</label>
+                                <input type="file" class="form-control" id="images" name="images[]" multiple>
+                                <div id="imagePreviewContainer" class="mt-2"></div>
+                                <div class="mt-2" id="existingImagesContainer">
+                                    <?php if (!empty($note['images'])): ?>
+                                        <?php $images = json_decode($note['images'], true); ?>
+                                        <?php foreach ($images as $index => $image): ?>
+                                            <div class="d-flex align-items-center" id="image_<?php echo $index; ?>">
+                                                <img src="<?php echo $image; ?>" alt="现有图片" class="img-fluid image-preview">
+                                                <button type="button" class="btn btn-sm btn-outline-danger delete-btn" onclick="markImageForDeletion(<?php echo $index; ?>)">删除</button>
+                                                <input type="checkbox" name="delete_images[]" value="<?php echo $index; ?>" id="deleteImage_<?php echo $index; ?>" style="display: none;">
+                                            </div>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="files" class="form-label">上传文件（多个）</label>
+                                <input type="file" class="form-control" id="files" name="files[]" multiple>
+                                <div id="filePreviewContainer" class="mt-2"></div>
+                                <div class="mt-2" id="existingFilesContainer">
+                                    <?php if (!empty($note['files'])): ?>
+                                        <?php $files = json_decode($note['files'], true); ?>
+                                        <?php foreach ($files as $index => $file): ?>
+                                            <div class="d-flex align-items-center" id="file_<?php echo $index; ?>">
+                                                <a href="<?php echo $file; ?>" class="btn btn-sm btn-outline-primary" download>下载文件</a>
+                                                <button type="button" class="btn btn-sm btn-outline-danger delete-btn" onclick="markFileForDeletion(<?php echo $index; ?>)">删除</button>
+                                                <input type="checkbox" name="delete_files[]" value="<?php echo $index; ?>" id="deleteFile_<?php echo $index; ?>" style="display: none;">
+                                            </div>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">保存更新</button>
+							<a href="index.php" class="btn btn-primary">返回</a>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const mainContent = document.querySelector('.main-content');
+            sidebar.classList.toggle('active');
+            mainContent.classList.toggle('active');
+        }
+
+        document.getElementById('images').addEventListener('change', function(e) {
+            const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+            imagePreviewContainer.innerHTML = '';
+            for (let i = 0; i < this.files.length; i++) {
+                const file = this.files[i];
+                if (file.type.match('image.*')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.className = 'img-fluid image-preview';
+                        img.alt = '预览图片';
+                        imagePreviewContainer.appendChild(img);
+                    }
+                    reader.readAsDataURL(file);
+                }
+            }
+        });
+        function markImageForDeletion(index) {
+            document.getElementById('deleteImage_' + index).checked = true;
+            document.getElementById('image_' + index).classList.add('grayed-out');
+        }
+        function markFileForDeletion(index) {
+            document.getElementById('deleteFile_' + index).checked = true;
+            document.getElementById('file_' + index).classList.add('grayed-out');
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('click', function(event) {
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                const toggleButton = document.querySelector('.toggle-sidebar');
+                if (!sidebar.contains(event.target) && !toggleButton.contains(event.target) && window.innerWidth <= 768) {
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.querySelector('.sidebar');
+                    const mainContent = document.querySelector('.main-content');
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+        let touchStartX = 0;
+        let touchEndX = 0;
+        document.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+        }, false);
+        document.addEventListener('touchend', function(e) {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, false);
+        function handleSwipe() {
+            if (window.innerWidth <= 768) {
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                const swipeThreshold = 50;
+                const difference = Math.abs(touchEndX - touchStartX);
+                if (difference > swipeThreshold && sidebar.classList.contains('active')) {
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            }
+        }
+		
+        // 按钮的JS
+        function isMobile() {
+            return /Mobi|Android|iPhone/i.test(navigator.userAgent);
+        }
+        if (isMobile()) {
+            document.querySelector('.toggle-sidebar').style.display = 'block';
+        } else {
+            document.querySelector('.toggle-sidebar').style.display = 'none';
+        }
+    </script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\knowledge\edit.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\knowledge\favories_view.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit();
+}
+
+$id = $_GET['id'] ?? null;
+
+// 检查笔记是否存在
+$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE id = ?");
+$stmt->execute([$id]);
+$note = $stmt->fetch();
+
+if (!$note) {
+    die("笔记不存在");
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>查看笔记 - PZIOT笔记网</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico)" type="image/x-icon">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-12">
+                <h1>查看笔记</h1>
+                <a href="../favorites.php" class="btn btn-secondary">返回收藏夹</a>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="mb-0"><?php echo htmlspecialchars($note['title']); ?></h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text"><?php echo htmlspecialchars($note['content']); ?></p>
+                        <?php if (!empty($note['images'])): ?>
+                            <?php foreach (json_decode($note['images'], true) as $image): ?>
+                                <img src="<?php echo $image; ?>" alt="笔记图片" class="img-fluid rounded mb-2" style="max-height: 500px;">
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        <?php if (!empty($note['files'])): ?>
+                            <div class="mt-2">
+                                <?php foreach (json_decode($note['files'], true) as $file): ?>
+                                    <a href="uploads/files/<?php echo basename($file); ?>" class="btn btn-sm btn-outline-primary" download>下载文件</a>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                        <div class="d-flex justify-content-between mt-2">
+                            <small class="text-muted">创建者: 
+                                <?php
+                                $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+                                $userStmt->execute([$note['user_id']]);
+                                $user = $userStmt->fetch();
+                                echo htmlspecialchars($user['username']);
+                                ?>
+                            </small>
+                            <div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\knowledge\favories_view.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\knowledge\index.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit();
+}
+
+// 获取知识库分类
+$categories = [];
+try {
+    $stmt = $pdo->query("SELECT * FROM knowledge_categories ORDER BY name ASC");
+    $categories = $stmt->fetchAll();
+} catch (Exception $e) {
+    error_log("Failed to fetch knowledge categories: " . $e->getMessage());
+}
+
+// 获取当前分类ID
+$categoryId = $_GET['category_id'] ?? null;
+
+// 获取搜索关键词
+$searchKeyword = $_GET['search'] ?? '';
+
+// 获取笔记
+$notes = [];
+try {
+    $query = "SELECT * FROM knowledge_notes";
+    $params = [];
+    $conditions = [];
+
+    if ($categoryId) {
+        $conditions[] = "category_id = ?";
+        $params[] = $categoryId;
+    }
+
+    if (!empty($searchKeyword)) {
+        $conditions[] = "title LIKE ? OR content LIKE ?";
+        $params[] = "%{$searchKeyword}%";
+        $params[] = "%{$searchKeyword}%";
+    }
+
+    if (!empty($conditions)) {
+        $query .= " WHERE " . implode(" AND ", $conditions);
+    }
+
+    $query .= " ORDER BY created_at DESC";
+
+    $stmt = $pdo->prepare($query);
+    $stmt->execute($params);
+    $notes = $stmt->fetchAll();
+} catch (Exception $e) {
+    error_log("Failed to fetch notes: " . $e->getMessage());
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PZIOT笔记网</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            width: 200px;
+            background-color: #343a40;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            padding: 20px 0;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+            z-index: 1000;
+        }
+        .sidebar.collapsed {
+            transform: translateX(-200px);
+        }
+        .sidebar .nav-link {
+            color: #dfe6e9;
+            padding: 10px 20px;
+            display: block;
+        }
+        .sidebar .nav-link:hover {
+            background-color: #485460;
+        }
+        .sidebar .nav-link.active {
+            background-color: #6c7ae0;
+        }
+        .main-content {
+            margin-left: 200px;
+            padding: 20px;
+            transition: margin-left 0.3s ease;
+        }
+        .main-content.collapsed {
+            margin-left: 0;
+        }
+        .toggle-sidebar {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1001;
+            display: none;
+            background-color: #343a40;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-200px);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .toggle-sidebar {
+                display: block;
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-content.active {
+                margin-left: 200px;
+            }
+        }
+        .note-card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            transition: transform 0.3s ease;
+        }
+        .note-card:hover {
+            transform: translateY(-5px);
+        }
+        .note-card .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .note-card .card-body {
+            padding: 20px;
+        }
+        .note-image {
+            max-height: 200px;
+            object-fit: cover;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .note-file {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-2 sidebar">
+                <ul class="nav flex-column">
+                    <li class="nav-item active">
+                        <a class="nav-link" href="index.php">知识库</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../recycle.php">回收站</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../favorites.php">收藏</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="openAIAndClose()">AI智能笔记</a>
+                    </li>
+                    <?php if (isset($_SESSION['is_xiaoxuan']) && $_SESSION['is_xiaoxuan']): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="../settings.php">设置</a>
+                        </li>
+                    <?php endif; ?>
+                     <li class="nav-item">
+                         <a class="nav-link" href="../logout.php">退出登录</a>
+                     </li>
+                </ul>
+            </div>
+            <div class="col-md-10 main-content">
+                <h2>知识库</h2>
+                <!-- 按钮控件-->
+                <button class="toggle-sidebar d-lg-none" onclick="toggleSidebar()" style="left: 85%;" id="an">☰</button>
+                <br/>
+                
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h3 class="mb-0">所有笔记</h3>
+                                <div class="btn-group">
+                                    <a href="create.php" class="btn btn-primary">新建笔记</a>
+                                    <a href="categories.php" class="btn btn-secondary">管理分类</a>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <form method="GET" action="index.php" class="d-flex">
+                                        <input type="text" class="form-control me-2" name="search" placeholder="输入关键词，关键内容等待1秒自动搜索" value="<?php echo htmlspecialchars($searchKeyword); ?>" id="searchInput">
+                                    </form>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="categoryFilter" class="form-label">选择分类</label>
+                                    <select class="form-select" id="categoryFilter" onchange="filterNotes()">
+                                        <option value="">全部分类</option>
+                                        <?php foreach ($categories as $category): ?>
+                                            <option value="<?php echo $category['id']; ?>" <?php echo isset($categoryId) && $categoryId == $category['id'] ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($category['name']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="row" id="notesContainer">
+                                    <?php foreach ($notes as $note): ?>
+                                        <div class="col-md-12 mb-4">
+                                            <div class="card note-card">
+                                                <div class="card-header d-flex justify-content-between align-items-center">
+                                                    <span><?php echo htmlspecialchars($note['title']); ?></span>
+                                                    <small class="text-muted"><?php echo $note['created_at']; ?></small>
+                                                </div>
+                                                <div class="card-body">
+                                                    <p class="card-text"><?php echo htmlspecialchars($note['content']); ?></p>
+                                                    <?php if (!empty($note['images'])): ?>
+                                                        <?php foreach (json_decode($note['images'], true) as $image): ?>
+                                                            <img src="<?php echo $image; ?>" alt="笔记图片" class="img-fluid note-image">
+                                                        <?php endforeach; ?>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($note['files'])): ?>
+                                                        <div class="mt-2">
+                                                            <?php foreach (json_decode($note['files'], true) as $file): ?>
+                                                                <a href="<?php echo htmlspecialchars($file); ?>" class="btn btn-sm btn-outline-primary note-file" download>下载文件</a>
+                                                            <?php endforeach; ?>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                    <div class="d-flex justify-content-between mt-2">
+                                                        <small class="text-muted">创建者: 
+                                                            <?php
+                                                            if (isset($note['user_id'])) {
+                                                                $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+                                                                $userStmt->execute([$note['user_id']]);
+                                                                $user = $userStmt->fetch();
+                                                                echo htmlspecialchars($user['username']);
+                                                            } else {
+                                                                echo "未知";
+                                                            }
+                                                            ?>
+                                                        </small>
+                                                        <div>
+                                                            <?php if (isset($_SESSION['user_id']) && $_SESSION['user_id'] == $note['user_id']): ?>
+                                                                <a href="edit.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-primary">编辑</a>
+                                                                <a href="delete.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定删除此笔记吗？')">移入回收站</a>
+                                                            <?php endif; ?>
+                                                            <a href="view.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-secondary">浏览</a>
+                                                            <!-- 添加收藏按钮 -->
+                                                            <form method="POST" action="../favorites.php" style="display: inline;">
+                                                                <input type="hidden" name="note_id" value="<?php echo $note['id']; ?>">
+                                                                <?php
+                                                                // 检查当前笔记是否已被收藏
+                                                                $stmt = $pdo->prepare("SELECT * FROM favorites WHERE user_id = ? AND note_id = ?");
+                                                                $stmt->execute([$_SESSION['user_id'], $note['id']]);
+                                                                $isFavorite = $stmt->fetch();
+                                                                ?>
+                                                                <input type="hidden" name="action" value="<?php echo $isFavorite ? 'remove_favorite' : 'add_favorite'; ?>">
+                                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                                    <?php echo $isFavorite ? '取消收藏' : '收藏'; ?>
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+    <script>
+        // AI链接点击处理函数
+        function openAIAndClose() {
+            // 在新标签页中打开AI界面
+            window.open('../desp/index.html', '_blank');
+            
+            // 尝试关闭当前窗口
+            window.opener = null;
+            window.open('', '_self');
+            window.close();
+            
+            return false; // 阻止默认链接行为
+        }
+
+        function isMobile() {
+            return /Mobi|Android|iPhone/i.test(navigator.userAgent);
+        }
+        isMobile();
+        if (isMobile()) {
+            document.querySelector('#an').style.display = 'block';
+        } else {
+            document.querySelector('#an').style.display = 'none';
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const mainContent = document.querySelector('.main-content');
+            sidebar.classList.toggle('active');
+            mainContent.classList.toggle('active');
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('click', function(event) {
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                const toggleButton = document.querySelector('.toggle-sidebar');
+
+                if (!sidebar.contains(event.target) && !toggleButton.contains(event.target) && window.innerWidth <= 768) {
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.querySelector('.sidebar');
+                    const mainContent = document.querySelector('.main-content');
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            });
+        });
+
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+        }, false);
+
+        document.addEventListener('touchend', function(e) {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, false);
+
+        function handleSwipe() {
+            if (window.innerWidth <= 768) {
+                const sidebar = document.querySelector('.sidebar');
+                const mainContent = document.querySelector('.main-content');
+                const swipeThreshold = 50;
+                const difference = Math.abs(touchEndX - touchStartX);
+
+                if (difference > swipeThreshold && sidebar.classList.contains('active')) {
+                    sidebar.classList.remove('active');
+                    mainContent.classList.remove('active');
+                }
+            }
+        }
+
+        function filterNotes() {
+            const categoryId = document.getElementById('categoryFilter').value;
+            const searchKeyword = document.getElementById('searchInput')?.value ?? '';
+            window.location.href = 'index.php?category_id=' + categoryId + '&search=' + encodeURIComponent(searchKeyword);
+        }
+
+        let searchTimeout;
+        document.getElementById('searchInput').addEventListener('input', function() {
+            const searchKeyword = this.value;
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                const categoryId = document.getElementById('categoryFilter').value;
+                window.location.href = 'index.php?category_id=' + categoryId + '&search=' + encodeURIComponent(searchKeyword);
+            }, 400);
+        });
+    </script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\knowledge\index.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\knowledge\recycle_view.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit();
+}
+
+$id = $_GET['id'] ?? null;
+
+// 检查笔记是否存在
+$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE id = ?");
+$stmt->execute([$id]);
+$note = $stmt->fetch();
+
+if (!$note) {
+    die("笔记不存在");
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>查看笔记 - PZIOT笔记网</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico)" type="image/x-icon">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-12">
+                <h1>查看笔记</h1>
+                <a href="../recycle.php" class="btn btn-secondary">返回回收站</a>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="mb-0"><?php echo htmlspecialchars($note['title']); ?></h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text"><?php echo htmlspecialchars($note['content']); ?></p>
+                        <?php if (!empty($note['images'])): ?>
+                            <?php foreach (json_decode($note['images'], true) as $image): ?>
+                                <img src="<?php echo $image; ?>" alt="笔记图片" class="img-fluid rounded mb-2" style="max-height: 500px;">
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        <?php if (!empty($note['files'])): ?>
+                            <div class="mt-2">
+                                <?php foreach (json_decode($note['files'], true) as $file): ?>
+                                    <a href="/uploads/files/<?php echo basename($file); ?>" class="btn btn-sm btn-outline-primary" download>下载文件</a>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                        <div class="d-flex justify-content-between mt-2">
+                            <small class="text-muted">创建者: 
+                                <?php
+                                $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+                                $userStmt->execute([$note['user_id']]);
+                                $user = $userStmt->fetch();
+                                echo htmlspecialchars($user['username']);
+                                ?>
+                            </small>
+                            <div>
+                                <?php if (isset($_SESSION['user_id']) && $_SESSION['user_id'] == $note['user_id']): ?>
+                                    <a href="edit.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-primary">编辑</a>
+                                    <a href="delete.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定删除此笔记吗？')">删除</a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\knowledge\recycle_view.php ======= 
+ 
+ 
+======= ��ʼ��D:\phpstudy_pro\note_cloud\knowledge\view.php ======= 
+ 
+<?php
+session_start();
+include('../includes/config.php');
+
+// 检查用户是否登录
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit();
+}
+
+$id = $_GET['id'] ?? null;
+
+// 检查笔记是否存在
+$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE id = ?");
+$stmt->execute([$id]);
+$note = $stmt->fetch();
+
+if (!$note) {
+    die("笔记不存在");
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>查看笔记 - PZIOT笔记网</title>
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico)" type="image/x-icon">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-12">
+                <h1>查看笔记</h1>
+                <a href="index.php" class="btn btn-secondary">返回知识库</a>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="mb-0"><?php echo htmlspecialchars($note['title']); ?></h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text"><?php echo htmlspecialchars($note['content']); ?></p>
+                        <?php if (!empty($note['images'])): ?>
+                            <?php foreach (json_decode($note['images'], true) as $image): ?>
+                                <img src="<?php echo $image; ?>" alt="笔记图片" class="img-fluid rounded mb-2" style="max-height: 500px;">
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        <?php if (!empty($note['files'])): ?>
+                            <div class="mt-2">
+                                <?php foreach (json_decode($note['files'], true) as $file): ?>
+                                    <a href="/uploads/files/<?php echo basename($file); ?>" class="btn btn-sm btn-outline-primary" download>下载文件</a>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                        <div class="d-flex justify-content-between mt-2">
+                            <small class="text-muted">创建者: 
+                                <?php
+                                $userStmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+                                $userStmt->execute([$note['user_id']]);
+                                $user = $userStmt->fetch();
+                                echo htmlspecialchars($user['username']);
+                                ?>
+                            </small>
+                            <div>
+                                <?php if (isset($_SESSION['user_id']) && $_SESSION['user_id'] == $note['user_id']): ?>
+                                    <a href="edit.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-primary">编辑</a>
+                                    <a href="delete.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定删除此笔记吗？')">删除</a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
+======= ������D:\phpstudy_pro\note_cloud\knowledge\view.php ======= 
+ 
