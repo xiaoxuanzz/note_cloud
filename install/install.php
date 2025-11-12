@@ -1,12 +1,6 @@
 <?php
 /**
- * Note Cloud 安装程序 v2.8（完全修复版）
- * 修复清单：
- * 1. ✅ 自动检测数据库引擎（InnoDB/MyISAM）
- * 2. ✅ 修复 MyISAM 下的事务错误
- * 3. ✅ 修复 htmlspecialchars() null 参数警告（PHP 8.1+）
- * 4. ✅ 动态适配外键约束
- * 5. ✅ 智能事务管理
+ * Note Cloud 安装程序 v2.8
  */
 
 ob_start();

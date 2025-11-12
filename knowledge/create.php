@@ -160,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <a class="nav-link" href="../favorites.php">收藏</a>
                     </li>
 					<li class="nav-item">
-					    <a class="nav-link" href="desp/index.html" target="_blank" rel="noopener noreferrer">AI智能笔记</a>
+					    <a class="nav-link" href="desp/index.php" target="_blank" rel="noopener noreferrer">AI智能笔记</a>
 					</li>
                    <li class="nav-item">
                          <a class="nav-link" href="../logout.php">退出登录</a>

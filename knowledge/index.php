@@ -174,7 +174,7 @@ try {
                         <a class="nav-link" href="../favorites.php">收藏</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#" onclick="openAIAndClose()">AI智能笔记</a>
+                        <a class="nav-link" href="../desp/index.php" onclick="openAIAndClose()">AI智能笔记</a>
                     </li>
                     <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
                         <li class="nav-item">
@@ -294,7 +294,7 @@ try {
         // AI链接点击处理函数
         function openAIAndClose() {
             // 在新标签页中打开AI界面
-            window.open('../desp/index.html', '_blank');
+            window.open('../desp/index.php', '_blank');
             
             // 尝试关闭当前窗口
             window.opener = null;

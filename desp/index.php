@@ -1,3 +1,12 @@
+<?php
+session_start();
+// 登录检查：未登录则跳转到登录页
+if (!isset($_SESSION['user_id'])) {
+    header('Location: ../login.php');
+    exit();
+}
+// 已登录则继续渲染页面，不执行任何跳转
+?>
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -673,7 +682,7 @@
 
         /* ========== 调用 Kimi API ========== */
         async function callKimiAPIWithRetry(retryCount = 1) {
-            const apiKey = 'sk-2tvDaVrWDIYIHSTIXusqFqxhTJQqSga8rPYi6Co7LxgjEvVD'; // 请替换
+            const apiKey = 'YOU_KIMI_API_KEY'; // 请替换
             const url = 'https://api.moonshot.cn/v1/chat/completions';
             
             const messages = [{

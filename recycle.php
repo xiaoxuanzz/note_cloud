@@ -154,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete-permanent'])) {
                         <a class="nav-link" href="favorites.php">收藏</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="desp/index.html" target="_blank">AI智能笔记</a>
+                        <a class="nav-link" href="desp/index.php" target="_blank">AI智能笔记</a>
                     </li>
                     <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
                         <li class="nav-item">
