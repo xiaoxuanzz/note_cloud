@@ -83,7 +83,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <li class="nav-item"><a class="nav-link active" href="users.php">👥 用户管理</a></li>
             <li class="nav-item"><a class="nav-link" href="notes.php">📝 笔记管理</a></li>
             <li class="nav-item"><a class="nav-link" href="settings.php">⚙️ 系统设置</a></li>
-            <li class="nav-item mt-5"><a class="nav-link text-danger" href="../logout.php">🚪 退出登录</a></li>
+            <li class="nav-item">
+                <a class="nav-link" href="../knowledge/index.php">🚪️ 返回主页</a>
+            </li>
         </ul>
     </div>
 

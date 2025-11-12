@@ -8,27 +8,56 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// 获取回收站中的笔记
-$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE user_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC");
-$stmt->execute([$_SESSION['user_id']]);
-$recycleNotes = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// 处理恢复笔记
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['restore'])) {
-    $noteId = $_POST['note_id'];
-    $stmt = $pdo->prepare("UPDATE knowledge_notes SET deleted_at = NULL WHERE id = ? AND user_id = ?");
-    $stmt->execute([$noteId, $_SESSION['user_id']]);
-    header("Location: recycle.php");
-    exit();
+// 获取回收站中的笔记（修复：添加错误处理和权限判断）
+$recycleNotes = [];
+try {
+    // 如果是管理员，查看所有回收站笔记；否则只查看自己的
+    if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
+        $stmt = $pdo->query("SELECT * FROM knowledge_notes WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC");
+    } else {
+        $stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE user_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC");
+        $stmt->execute([$_SESSION['user_id']]);
+    }
+    $recycleNotes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log("回收站查询失败: " . $e->getMessage());
+    $recycleNotes = [];
 }
 
-// 处理彻底删除笔记
+// 处理恢复笔记（修复：添加权限检查）
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['restore'])) {
+    $noteId = $_POST['note_id'];
+    try {
+        if ($_SESSION['role'] === 'admin') {
+            $stmt = $pdo->prepare("UPDATE knowledge_notes SET deleted_at = NULL WHERE id = ?");
+            $stmt->execute([$noteId]);
+        } else {
+            $stmt = $pdo->prepare("UPDATE knowledge_notes SET deleted_at = NULL WHERE id = ? AND user_id = ?");
+            $stmt->execute([$noteId, $_SESSION['user_id']]);
+        }
+        header("Location: recycle.php");
+        exit();
+    } catch (Exception $e) {
+        error_log("恢复笔记失败: " . $e->getMessage());
+    }
+}
+
+// 处理彻底删除笔记（修复：添加权限检查）
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete-permanent'])) {
     $noteId = $_POST['note_id'];
-    $stmt = $pdo->prepare("DELETE FROM knowledge_notes WHERE id = ? AND user_id = ?");
-    $stmt->execute([$noteId, $_SESSION['user_id']]);
-    header("Location: recycle.php");
-    exit();
+    try {
+        if ($_SESSION['role'] === 'admin') {
+            $stmt = $pdo->prepare("DELETE FROM knowledge_notes WHERE id = ?");
+            $stmt->execute([$noteId]);
+        } else {
+            $stmt = $pdo->prepare("DELETE FROM knowledge_notes WHERE id = ? AND user_id = ?");
+            $stmt->execute([$noteId, $_SESSION['user_id']]);
+        }
+        header("Location: recycle.php");
+        exit();
+    } catch (Exception $e) {
+        error_log("彻底删除失败: " . $e->getMessage());
+    }
 }
 ?>
 
@@ -37,9 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete-permanent'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PZIOT笔记网</title>
+    <title>回收站 - PZIOT笔记网</title>
     <link href="css/bootstrap.min.css" rel="stylesheet">
-	<link rel="icon" href="http://10.92.169.234:8800/admin/down.php/a6c2ff793b37e00796a7f0d1624131ad.ico )" type="image/x-icon">
     <style>
         .sidebar {
             width: 200px;
@@ -96,14 +124,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete-permanent'])) {
             .sidebar {
                 transform: translateX(-200px);
             }
+            .sidebar.active {
+                transform: translateX(0);
+            }
             .main-content {
                 margin-left: 0;
             }
             .toggle-sidebar {
                 display: block;
-            }
-            .sidebar.active {
-                transform: translateX(0);
             }
             .main-content.active {
                 margin-left: 200px;
@@ -112,10 +140,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete-permanent'])) {
     </style>
 </head>
 <body>
-
     <div class="container-fluid">
         <div class="row">
-            <div class="col-md-2 sidebar">
+            <div class="col-md-2 sidebar" id="sidebar">
                 <ul class="nav flex-column">
                     <li class="nav-item">
                         <a class="nav-link" href="knowledge/index.php">知识库</a>
@@ -126,23 +153,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete-permanent'])) {
                     <li class="nav-item">
                         <a class="nav-link" href="favorites.php">收藏</a>
                     </li>
-					<li class="nav-item">
-					    <a class="nav-link" href="desp/index.html" target="_blank" rel="noopener noreferrer">AI智能笔记</a>
-					</li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="desp/index.html" target="_blank">AI智能笔记</a>
+                    </li>
                     <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
                         <li class="nav-item">
                             <a class="nav-link" href="settings.php">设置</a>
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="../logout.php">退出登录</a>
+                        <a class="nav-link" href="logout.php">退出登录</a>
                     </li>
                 </ul>
             </div>
-            <div class="col-md-10 main-content">
+
+            <div class="col-md-10 main-content" id="mainContent">
                 <h2>回收站</h2>
-				<button class="toggle-sidebar d-lg-none" onclick="toggleSidebar()" style="left: 85%;" id="an">☰</button>
-				<br/>
+                <button class="toggle-sidebar d-lg-none" onclick="toggleSidebar()" style="left: 85%;" id="an">☰</button>
+                <br/>
+                
                 <div class="row mt-4">
                     <?php foreach ($recycleNotes as $note): ?>
                         <div class="col-md-12">

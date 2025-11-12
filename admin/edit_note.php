@@ -122,52 +122,56 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <li class="nav-item"><a class="nav-link" href="index.php">📊 数据统计</a></li>
             <li class="nav-item"><a class="nav-link" href="users.php">👥 用户管理</a></li>
             <li class="nav-item"><a class="nav-link active" href="notes.php">📝 笔记管理</a></li>
-            <li class="nav-item"><a class="nav-link" href="settings.php">⚙️ 系统设置</a></li>
-            <li class="nav-item mt-5"><a class="nav-link text-danger" href="../logout.php">🚪 退出登录</a></li>
+            <li class="nav-item">
+                <a class="nav-link" href="../knowledge/index.php">🚪️ 返回主页</a>
+            </li>
         </ul>
     </div>
 
-    <div class="main-content">
-        <h2>编辑笔记</h2>
-        <div class="card mt-3">
-            <div class="card-body">
-                <form method="POST" enctype="multipart/form-data">
-                    <div class="mb-3">
-                        <label for="title" class="form-label">标题 *</label>
-                        <input type="text" class="form-control" id="title" name="title" value="<?php echo htmlspecialchars($note['title']); ?>" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="content" class="form-label">内容 *</label>
-                        <textarea class="form-control" id="content" name="content" rows="8" required><?php echo htmlspecialchars($note['content']); ?></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label for="image" class="form-label">上传图片 (JPG, PNG, GIF)</label>
-                        <input type="file" class="form-control" id="image" name="image" accept="image/*">
-                        <?php if (!empty($note['image_path']) && file_exists($note['image_path'])): ?>
-                            <div class="mt-3">
-                                <img src="<?php echo $note['image_path']; ?>" alt="当前图片" class="img-fluid rounded" style="max-height: 200px;">
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="mb-3">
-                        <label for="file" class="form-label">上传文件</label>
-                        <input type="file" class="form-control" id="file" name="file">
-                        <?php if (!empty($note['file_path']) && file_exists($note['file_path'])): ?>
-                            <div class="mt-3">
-                                <a href="<?php echo $note['file_path']; ?>" class="btn btn-sm btn-outline-primary" download>📎 下载当前文件</a>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                    <button type="submit" class="btn btn-primary">💾 更新笔记</button>
-                    <a href="notes.php" class="btn btn-secondary">取消</a>
-                    
-                    <?php if (!empty($update_error)): ?>
-                        <div class="alert alert-danger mt-3"><?php echo $update_error; ?></div>
+<div class="main-content">
+    <h2>编辑笔记</h2>
+    <div class="card mt-3">
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="title" class="form-label">标题 *</label>
+                    <input type="text" class="form-control" id="title" name="title" value="<?php echo htmlspecialchars($note['title']); ?>" required>
+                </div>
+                <div class="mb-3">
+                    <label for="content" class="form-label">内容 *</label>
+                    <textarea class="form-control" id="content" name="content" rows="8" required><?php echo htmlspecialchars($note['content']); ?></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="image" class="form-label">上传图片 (JPG, PNG, GIF)</label>
+                    <input type="file" class="form-control" id="image" name="image" accept="image/*">
+                    <?php if (!empty($note['image_path']) && file_exists($note['image_path'])): ?>
+                        <div class="mt-3">
+                            <img src="<?php echo $note['image_path']; ?>" alt="当前图片" class="img-fluid rounded" style="max-height: 200px;">
+                        </div>
                     <?php endif; ?>
-                </form>
-            </div>
+                </div>
+                <div class="mb-3">
+                    <label for="file" class="form-label">上传文件</label>
+                    <input type="file" class="form-control" id="file" name="file">
+                    <?php if (!empty($note['file_path']) && file_exists($note['file_path'])): ?>
+                        <div class="mt-3">
+                            <a href="<?php echo $note['file_path']; ?>" class="btn btn-sm btn-outline-primary" download>📎 下载当前文件</a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+                
+                <!-- ✅ 修改：将提交按钮改为跳转链接 -->
+                <a href="knowledge/create.php" class="btn btn-primary">➕ 创建新笔记</a>
+                
+                <a href="notes.php" class="btn btn-secondary">取消</a>
+                
+                <?php if (!empty($update_error)): ?>
+                    <div class="alert alert-danger mt-3"><?php echo $update_error; ?></div>
+                <?php endif; ?>
+            </form>
         </div>
     </div>
+</div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 </body>

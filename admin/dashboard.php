@@ -38,7 +38,6 @@ $today_notes = $stmt->fetchColumn();
         <div class="row">
             <div class="col-md-12">
                 <h1>管理面板</h1>
-                <a href="settings.php" class="btn btn-primary mt-3">系统设置</a>
                 <a href="../logout.php" class="btn btn-danger mt-3">退出登录</a>
             </div>
         </div>

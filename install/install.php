@@ -1,15 +1,15 @@
 <?php
 /**
- * Note Cloud 安装程序 v2.6（修复版）
+ * Note Cloud 安装程序 v2.8（完全修复版）
  * 修复清单：
- * 1. 修复 heredoc 结束标记缩进问题（第534行）
- * 2. 修复数组元素间缺少逗号问题
- * 3. 密码明文存储（不推荐生产环境）
+ * 1. ✅ 自动检测数据库引擎（InnoDB/MyISAM）
+ * 2. ✅ 修复 MyISAM 下的事务错误
+ * 3. ✅ 修复 htmlspecialchars() null 参数警告（PHP 8.1+）
+ * 4. ✅ 动态适配外键约束
+ * 5. ✅ 智能事务管理
  */
 
-// ✅ 核心修复：必须在第一行开启输出缓冲
 ob_start();
-
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 session_start();
@@ -137,8 +137,21 @@ $step = filter_input(INPUT_GET, 'step', FILTER_VALIDATE_INT, ['options' => ['def
             <?php
             // ==================== 步骤2：配置表单 ====================
             elseif ($step == 2):
-                $db = $_SESSION['db'] ?? ['host' => 'localhost', 'port' => '3306', 'name' => 'note_cloud'];
-                $admin = $_SESSION['admin'] ?? ['username' => 'admin'];
+                // ✅ 修复：为所有字段提供默认值，避免 null 导致 htmlspecialchars() 警告
+                $db = $_SESSION['db'] ?? [
+                    'host' => 'localhost', 
+                    'port' => '3306', 
+                    'name' => 'note_cloud',
+                    'user' => '',      // 新增：防止 null
+                    'pass' => ''       // 新增：防止 null
+                ];
+                
+                $admin = $_SESSION['admin'] ?? [
+                    'username' => 'admin',
+                    'email' => '',     // 新增：防止 null
+                    'pass' => '',      // 新增：防止 null
+                    'pass2' => ''      // 新增：防止 null
+                ];
             ?>
 
                 <h3 class="mb-4"><i class="fas fa-wrench"></i> 配置信息</h3>
@@ -165,7 +178,8 @@ $step = filter_input(INPUT_GET, 'step', FILTER_VALIDATE_INT, ['options' => ['def
                         </div>
                         <div class="form-group">
                             <label>数据库用户名</label>
-                            <input type="text" class="form-control" name="db_user" value="<?= htmlspecialchars($db['user']) ?>" required>
+                            <!-- ✅ 修复：添加 ?? '' 双重保险 -->
+                            <input type="text" class="form-control" name="db_user" value="<?= htmlspecialchars($db['user'] ?? '') ?>" required>
                         </div>
                         <div class="form-group">
                             <label>数据库密码</label>
@@ -202,7 +216,8 @@ $step = filter_input(INPUT_GET, 'step', FILTER_VALIDATE_INT, ['options' => ['def
                         </div>
                         <div class="form-group">
                             <label>邮箱</label>
-                            <input type="email" class="form-control" name="admin_email" value="<?= htmlspecialchars($admin['email']) ?>" required>
+                            <!-- ✅ 修复：添加 ?? '' 双重保险 -->
+                            <input type="email" class="form-control" name="admin_email" value="<?= htmlspecialchars($admin['email'] ?? '') ?>" required>
                         </div>
                     </div>
 
@@ -212,7 +227,6 @@ $step = filter_input(INPUT_GET, 'step', FILTER_VALIDATE_INT, ['options' => ['def
                 </form>
 
                 <script>
-                // 密码验证脚本
                 const password = document.getElementById('adminPass');
                 const password2 = document.getElementById('adminPass2');
                 const passwordMessage = document.getElementById('passwordMessage');
@@ -224,7 +238,6 @@ $step = filter_input(INPUT_GET, 'step', FILTER_VALIDATE_INT, ['options' => ['def
                     const pwd2 = password2.value;
                     let isValid = true;
 
-                    // 密码长度
                     if (pwd1.length > 0 && pwd1.length < 6) {
                         passwordMessage.textContent = '❌ 密码长度至少6位';
                         passwordMessage.className = 'validation-message validation-error';
@@ -236,7 +249,6 @@ $step = filter_input(INPUT_GET, 'step', FILTER_VALIDATE_INT, ['options' => ['def
                         passwordMessage.style.display = 'none';
                     }
 
-                    // 密码匹配
                     if (pwd2.length > 0 && pwd1 !== pwd2) {
                         password2Message.textContent = '❌ 两次密码不一致';
                         password2Message.className = 'validation-message validation-error';
@@ -269,101 +281,97 @@ $step = filter_input(INPUT_GET, 'step', FILTER_VALIDATE_INT, ['options' => ['def
             <?php
             // ==================== 步骤3：执行安装 ====================
             elseif ($step == 3):
-                // ✅ 先显示加载界面
                 ?>
                 <div class="install-progress">
                     <h3 class="mb-4"><i class="fas fa-spinner fa-spin"></i> 正在安装系统...</h3>
-                    <div class="progress mb-3" style="height:30px; border-radius:8px;">
-                        <div id="installProgress" class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
-                             style="width:5%; font-size:14px; font-weight:bold;">
-                            准备中...
-                        </div>
-                    </div>
                     <div id="installLog" class="log-container"></div>
                 </div>
                 <?php
-                
-                // ✅ 安全的 $log 函数定义
                 $log = function($msg, $type = 'info') {
                     $icon = $type == 'success' ? '✓' : ($type == 'error' ? '✗' : '→');
                     $safeMsg = json_encode($icon . ' ' . $msg, JSON_UNESCAPED_UNICODE);
                     echo "<script>
-                        try {
-                            var div = document.createElement('div');
-                            div.className = 'alert alert-{$type}';
-                            div.style.margin = '8px 0';
-                            div.style.padding = '10px';
-                            div.style.fontSize = '14px';
-                            div.innerHTML = {$safeMsg};
-                            var logContainer = document.getElementById('installLog');
-                            if(logContainer) {
-                                logContainer.appendChild(div);
-                                logContainer.scrollTop = logContainer.scrollHeight;
-                            }
-                        } catch(e) { console.error('日志错误:', e); }
+                        var div = document.createElement('div');
+                        div.className = 'alert alert-{$type}';
+                        div.style.margin = '8px 0'; div.style.padding = '10px'; div.style.fontSize = '14px';
+                        div.innerHTML = {$safeMsg};
+                        var logContainer = document.getElementById('installLog');
+                        if(logContainer) { logContainer.appendChild(div); logContainer.scrollTop = logContainer.scrollHeight; }
                     </script>";
                     ob_flush(); flush();
                 };
-
-                // ✅ 实际安装逻辑
+            
                 if (isset($_GET['run']) && $_GET['run'] == '1') {
                     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
                         header('Location: ?step=2');
                         exit;
                     }
-
-                    // 验证密码
                     if ($_POST['admin_pass'] !== $_POST['admin_pass2']) {
                         $log('❌ 两次密码不一致', 'error');
                         echo '<a href="?step=2" class="btn btn-info btn-block mt-4">返回修改</a>';
                         exit;
                     }
-
+            
                     try {
-                        // ✅ MySQL 8.0 认证插件
+                        // 连接数据库
                         $dsn = "mysql:host={$_POST['db_host']};port={$_POST['db_port']};charset=utf8mb4;auth_plugin=mysql_native_password";
                         $pdo = new PDO($dsn, $_POST['db_user'], $_POST['db_pass'], [
                             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
                         ]);
-
+            
+                        // 创建数据库
                         $dbName = $_POST['db_name'];
                         $pdo->exec("CREATE DATABASE IF NOT EXISTS `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
                         $log('✓ 数据库创建成功', 'success');
-
-                        $pdo->beginTransaction();
-                        $pdo->exec("USE `$dbName`");
                         
-                        // 创建数据表
+                        // 选择数据库
+                        $pdo->exec("USE `$dbName`");
+            
+                        // ✅ 核心修复1：先检测引擎
+                        $engine = detectDatabaseEngine($pdo);
+                        
+                        // ✅ 核心修复2：建表操作（DDL）不使用事务
+                        createTables($pdo, $log, $engine);
+                        
+                        // ✅ 核心修复3：数据操作（DML）使用事务
+                        $useTransaction = ($engine === 'InnoDB');
+                        if ($useTransaction) {
+                            $pdo->beginTransaction();
+                        }
+            
                         try {
-                            createTables($pdo, $log);
+                            // 创建管理员（DML 操作）
+                            $plainPassword = $_POST['admin_pass'];
+                            $stmt = $pdo->prepare("INSERT INTO users (username, password, email, role, status, approved, created_at) VALUES (?, ?, ?, 'admin', 1, 1, NOW())");
+                            $stmt->execute([$_POST['admin_user'], $plainPassword, $_POST['admin_email']]);
+                            $log('✓ 管理员账号创建成功', 'success');
+                            
+                            // 只有 InnoDB 才需要提交
+                            if ($useTransaction) {
+                                $pdo->commit();
+                            }
+                            
                         } catch (Exception $e) {
-                            throw new Exception("数据表创建失败: " . $e->getMessage());
+                            // 回滚事务（仅 InnoDB）
+                            if ($useTransaction && $pdo->inTransaction()) {
+                                $pdo->rollBack();
+                            }
+                            throw $e;
                         }
 
-                        // ✅ 创建管理员（明文密码）
-                        $plainPassword = $_POST['admin_pass'];
-                        $stmt = $pdo->prepare("INSERT INTO users (username, password, email, role, status, approved, created_at) VALUES (?, ?, ?, 'admin', 1, 1, NOW())");
-                        $stmt->execute([$_POST['admin_user'], $plainPassword, $_POST['admin_email']]);
-                        $log('✓ 管理员账号创建成功', 'success');
-
-                        $pdo->commit();
-
-                        // ✅ 生成包含 PDO 的配置文件
+                        // 生成配置文件
                         if (!is_dir(CONFIG_DIR)) {
                             mkdir(CONFIG_DIR, 0755, true);
                         }
-                        
-                        $configContent = '<?php' . "\n";
-                        $configContent .= '/* Note Cloud 数据库配置 - 自动生成于 ' . date('Y-m-d H:i:s') . ' */' . "\n\n";
-                        $configContent .= '$dbconfig = array(' . "\n";
+                        $configContent = '<?php' . "\n/* Note Cloud 数据库配置 */\n" . '$dbconfig = array(' . "\n";
                         $configContent .= "    'host' => '" . addslashes($_POST['db_host']) . "',\n";
                         $configContent .= "    'port' => " . intval($_POST['db_port']) . ",\n";
                         $configContent .= "    'user' => '" . addslashes($_POST['db_user']) . "',\n";
                         $configContent .= "    'pwd' => '" . addslashes($_POST['db_pass']) . "',\n";
                         $configContent .= "    'dbname' => '" . addslashes($_POST['db_name']) . "'\n";
-                        $configContent .= ');' . "\n\n";
+                        $configContent .= ');' . "\n";
                         $configContent .= <<<'PDO_CODE'
-// 自动创建 PDO 数据库连接（所有页面直接使用 $pdo）
+                            
 try {
     $pdo = new PDO(
         "mysql:host={$dbconfig['host']};port={$dbconfig['port']};dbname={$dbconfig['dbname']};charset=utf8mb4",
@@ -377,8 +385,8 @@ try {
         ]
     );
 } catch (PDOException $e) {
-    error_log("PDO Connection Error: " . $e->getMessage());
-    die('<div style="text-align:center; padding:50px;"><h2>⚠️ 系统维护中</h2><p>数据库连接出现问题</p></div>');
+    error_log("PDO Error: " . $e->getMessage());
+    die('<div style="text-align:center; padding:50px;"><h2>⚠️ 系统维护中</h2></div>');
 }
 PDO_CODE;
                         
@@ -388,7 +396,7 @@ PDO_CODE;
                         chmod(CONFIG_PATH, 0644);
                         $log('✓ 配置文件创建成功', 'success');
 
-                        // ✅ 创建包含安装信息的锁文件
+                        // 创建安装锁
                         $installInfo = [
                             'installed' => true,
                             'version' => '1.0.0',
@@ -403,15 +411,12 @@ PDO_CODE;
                         }
                         $log('✓ 安装锁创建成功', 'success');
 
-                        // ✅ 关键修复：清空缓冲区再跳转
+                        // 跳转到完成页
                         ob_end_clean();
-                        echo "<script>window.location.href='?step=4';</script>";  // ✅ JS跳转，不受输出限制
+                        echo "<script>window.location.href='?step=4';</script>";
                         exit;
 
                     } catch (PDOException $e) {
-                        if (isset($pdo) && $pdo->inTransaction()) {
-                            $pdo->rollBack();
-                        }
                         $log('✗ 数据库错误: ' . $e->getMessage(), 'error');
                         echo '<a href="?step=2" class="btn btn-info btn-block mt-4">返回修改配置</a>';
                         exit;
@@ -424,19 +429,18 @@ PDO_CODE;
             ?>
 
             <?php
-            // ==================== 步骤4：完成 ====================
+            // ==================== 步骤4：安装完成 ====================
             elseif ($step == 4):
                 if (!file_exists(LOCK_PATH)) {
                     header('Location: ?step=1');
                     exit;
                 }
             
-                // ✅ 双重保险读取安装信息
+                // 读取安装信息
                 $dbName = $_SESSION['db']['name'] ?? '未知';
                 $adminUser = $_SESSION['admin']['username'] ?? '未知';
                 $adminEmail = $_SESSION['admin']['email'] ?? '未知';
                 
-                // ✅ 从锁文件读取
                 $installInfo = @include(LOCK_PATH);
                 if (is_array($installInfo)) {
                     $dbName = $installInfo['db_name'] ?? $dbName;
@@ -462,7 +466,7 @@ PDO_CODE;
                             <li>请妥善保管管理员密码</li>
                             <li><strong>建议立即删除 install/ 目录</strong></li>
                             <li>配置文件已生成：<code>includes/config.php</code></li>
-                            <li>安装锁文件：<code><?= LOCK_PATH ?></code></li>
+                            <li>安装锁文件：<code><?= htmlspecialchars(LOCK_PATH) ?></code></li>
                         </ol>
                     </div>
                 </div>
@@ -477,7 +481,7 @@ PDO_CODE;
                 </div>
             
                 <?php
-                // ✅ 关键修复：在显示完成后再清空 session
+                // 清空 session
                 unset($_SESSION['db'], $_SESSION['admin']);
                 ?>
             <?php endif; ?>
@@ -490,12 +494,35 @@ PDO_CODE;
 
 <?php
 /**
- * ✅ 创建所有数据表（明文密码版本）
+ * ==================== 核心函数库 ====================
  */
-function createTables(PDO $pdo, callable $log) {
-    $tables = [
-        // 1. users 表（无依赖，最先创建）
-        "CREATE TABLE IF NOT EXISTS users (
+
+/**
+ * ✅ 自动检测数据库引擎
+ */
+function detectDatabaseEngine(PDO $pdo) {
+    try {
+        $stmt = $pdo->query("SHOW ENGINES");
+        $engines = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($engines as $engine) {
+            $engineName = strtoupper($engine['Engine']);
+            $support = strtoupper($engine['Support']);
+            if ($engineName === 'INNODB' && in_array($support, ['YES', 'DEFAULT'])) {
+                return 'InnoDB';
+            }
+        }
+        return 'MyISAM';
+    } catch (Exception $e) {
+        return 'MyISAM';
+    }
+}
+
+/**
+ * ✅ 创建所有数据表（接收引擎参数）
+ */
+function createTables(PDO $pdo, callable $log, string $engine) {
+    $tableDefinitions = [
+        'users' => "
             id INT AUTO_INCREMENT PRIMARY KEY,
             username VARCHAR(255) NOT NULL UNIQUE,
             password VARCHAR(255) NOT NULL,
@@ -507,42 +534,38 @@ function createTables(PDO $pdo, callable $log) {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_username (username),
             INDEX idx_email (email)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        ",
         
-        // 2. knowledge_categories 表（依赖 users）
-        "CREATE TABLE IF NOT EXISTS knowledge_categories (
+        'knowledge_categories' => "
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
             user_id INT NOT NULL,
             description TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            " . ($engine === 'InnoDB' ? "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE," : "") . "
             INDEX idx_user_id (user_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        ",
         
-        // 3. note_tags 表（依赖 users）
-        "CREATE TABLE IF NOT EXISTS note_tags (
+        'note_tags' => "
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
             user_id INT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            " . ($engine === 'InnoDB' ? "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE," : "") . "
             UNIQUE KEY uk_user_tag (user_id, name)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        ",
         
-        // 4. knowledge_note_tags 表（依赖 users）
-        "CREATE TABLE IF NOT EXISTS knowledge_note_tags (
+        'knowledge_note_tags' => "
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
             user_id INT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            " . ($engine === 'InnoDB' ? "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE," : "") . "
             UNIQUE KEY uk_user_tag (user_id, name)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        ",
         
-        // 5. notes 表（依赖 users 和 knowledge_categories）
-        "CREATE TABLE IF NOT EXISTS notes (
+        'notes' => "
             id INT AUTO_INCREMENT PRIMARY KEY,
             user_id INT NOT NULL,
             title VARCHAR(255) NOT NULL,
@@ -552,55 +575,58 @@ function createTables(PDO $pdo, callable $log) {
             is_deleted TINYINT(1) DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            deleted_at TIMESTAMP NULL DEFAULT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (category_id) REFERENCES knowledge_categories(id) ON DELETE SET NULL,
+            " . ($engine === 'InnoDB' ? "
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (category_id) REFERENCES knowledge_categories(id) ON DELETE SET NULL,
+            " : "") . "
             INDEX idx_user_id (user_id),
             INDEX idx_category_id (category_id),
             FULLTEXT idx_title_content (title, content)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        ",
         
-        // 6. knowledge_notes 表（依赖 users 和 knowledge_categories）
-        "CREATE TABLE IF NOT EXISTS knowledge_notes (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id INT NOT NULL,
-            category_id INT DEFAULT NULL,
-            title VARCHAR(255) NOT NULL,
-            content LONGTEXT NOT NULL,
-            images JSON DEFAULT NULL,
-            files JSON DEFAULT NULL,
-            status TINYINT(1) DEFAULT 1,
-            view_count INT DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            deleted_at TIMESTAMP NULL DEFAULT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (category_id) REFERENCES knowledge_categories(id) ON DELETE SET NULL,
-            INDEX idx_user_id (user_id),
-            INDEX idx_category_id (category_id),
-            FULLTEXT idx_title_content (title, content)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        'knowledge_notes' => "
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    category_id INT DEFAULT NULL,
+                    title VARCHAR(255) NOT NULL,
+                    content LONGTEXT NOT NULL,
+                    images JSON DEFAULT NULL,
+                    files JSON DEFAULT NULL,
+                    status TINYINT(1) DEFAULT 1,
+                    view_count INT DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    deleted_at TIMESTAMP NULL DEFAULT NULL, 
+                    " . ($engine === 'InnoDB' ? "
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                        FOREIGN KEY (category_id) REFERENCES knowledge_categories(id) ON DELETE SET NULL,
+                    " : "") . "
+                    INDEX idx_user_id (user_id),
+                    INDEX idx_category_id (category_id),
+                    FULLTEXT idx_title_content (title, content)
+                ",
         
-        // 7. favorites 表（依赖 users 和 knowledge_notes，最后创建）
-        "CREATE TABLE IF NOT EXISTS favorites (
+        'favorites' => "
             user_id INT NOT NULL,
             note_id INT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (user_id, note_id),
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (note_id) REFERENCES knowledge_notes(id) ON DELETE CASCADE,
+            " . ($engine === 'InnoDB' ? "
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (note_id) REFERENCES knowledge_notes(id) ON DELETE CASCADE,
+            " : "") . "
             INDEX idx_created_at (created_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "
     ];
-
-    foreach ($tables as $sql) {
+    
+    foreach ($tableDefinitions as $tableName => $definition) {
         try {
+            $sql = "CREATE TABLE IF NOT EXISTS {$tableName} ({$definition}) ENGINE={$engine} DEFAULT CHARSET=utf8mb4";
             $pdo->exec($sql);
-            if (preg_match('/CREATE TABLE IF NOT EXISTS\s+`?(\w+)`?/i', $sql, $matches)) {
-                $log("✓ 表 {$matches[1]} 创建成功", 'success');
-            }
+            $log("✓ 表 {$tableName} 创建成功 (引擎: {$engine})", 'success');
         } catch (PDOException $e) {
-            throw new Exception("创建表失败: " . $e->getMessage());
+            throw new Exception("创建表 {$tableName} 失败: " . $e->getMessage());
         }
     }
 }
+?>

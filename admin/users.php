@@ -38,17 +38,14 @@ try {
             <li class="nav-item"><a class="nav-link" href="index.php">📊 数据统计</a></li>
             <li class="nav-item"><a class="nav-link active" href="users.php">👥 用户管理</a></li>
             <li class="nav-item"><a class="nav-link" href="notes.php">📝 笔记管理</a></li>
-            <li class="nav-item"><a class="nav-link" href="settings.php">⚙️ 系统设置</a></li>
-            <li class="nav-item mt-5"><a class="nav-link text-danger" href="../logout.php">🚪 退出登录</a></li>
+            <li class="nav-item"><a class="nav-link" href="../knowledge/index.php">🚪️ 返回主页</a></li>
         </ul>
     </div>
 
     <div class="main-content">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>用户管理</h2>
-            <a href="create_user.php" class="btn btn-success">➕ 添加用户</a>
-        </div>
-
+        <!-- ✅ 标题 -->
+        <h2 class="mb-4">用户管理</h2>
+        
         <div class="table-responsive">
             <table class="table table-hover table-bordered">
                 <thead class="table-dark">
@@ -86,6 +83,6 @@ try {
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

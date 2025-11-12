@@ -10,13 +10,22 @@ if (!isset($_SESSION['user_id'])) {
 
 $id = $_GET['id'] ?? null;
 
-// 检查笔记是否存在并属于当前用户
-$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE id = ? AND user_id = ?");
-$stmt->execute([$id, $_SESSION['user_id']]);
+// 查询笔记
+$stmt = $pdo->prepare("SELECT * FROM knowledge_notes WHERE id = ?");
+$stmt->execute([$id]);
 $note = $stmt->fetch();
 
 if (!$note) {
-    die("笔记不存在或您无权限访问");
+    die("笔记不存在");
+}
+
+// 权限验证
+$isAdmin = $_SESSION['role'] === 'admin';
+$isOwner = $note['user_id'] == $_SESSION['user_id'];
+
+if (!$isAdmin && !$isOwner) {
+    header("HTTP/1.1 403 Forbidden");
+    die("您无权访问此笔记");
 }
 
 // 获取知识库分类
