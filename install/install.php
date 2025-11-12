@@ -498,7 +498,7 @@ PDO_CODE;
  */
 function createTables(PDO $pdo, callable $log) {
     $tables = [
-        // 用户表
+        // 1. users 表（无依赖，最先创建）
         "CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
             username VARCHAR(255) NOT NULL UNIQUE,
@@ -510,25 +510,10 @@ function createTables(PDO $pdo, callable $log) {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_username (username),
-            INDEX idx_email (email),
-            INDEX idx_role (role),
-            INDEX idx_status (status),
-            INDEX idx_approved (approved)
+            INDEX idx_email (email)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-		
-		"CREATE TABLE IF NOT EXISTS favorites (
-		        user_id INT NOT NULL,
-		        note_id INT NOT NULL,
-		        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		        PRIMARY KEY (user_id, note_id),
-		        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-		        FOREIGN KEY (note_id) REFERENCES knowledge_notes(id) ON DELETE CASCADE,
-		        INDEX idx_user_id (user_id),
-		        INDEX idx_note_id (note_id),
-		        INDEX idx_created_at (created_at)
-		    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-
-        // 知识分类表
+        
+        // 2. knowledge_categories 表（依赖 users）
         "CREATE TABLE IF NOT EXISTS knowledge_categories (
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
@@ -537,35 +522,30 @@ function createTables(PDO $pdo, callable $log) {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            INDEX idx_user_id (user_id),
-            INDEX idx_name (name)
+            INDEX idx_user_id (user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-
-        // 标签表
+        
+        // 3. note_tags 表（依赖 users）
         "CREATE TABLE IF NOT EXISTS note_tags (
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
             user_id INT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            INDEX idx_user_id (user_id),
-            INDEX idx_name (name),
             UNIQUE KEY uk_user_tag (user_id, name)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-
-        // 知识标签表
+        
+        // 4. knowledge_note_tags 表（依赖 users）
         "CREATE TABLE IF NOT EXISTS knowledge_note_tags (
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
             user_id INT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            INDEX idx_user_id (user_id),
-            INDEX idx_name (name),
             UNIQUE KEY uk_user_tag (user_id, name)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-
-        // 笔记表
+        
+        // 5. notes 表（依赖 users 和 knowledge_categories）
         "CREATE TABLE IF NOT EXISTS notes (
             id INT AUTO_INCREMENT PRIMARY KEY,
             user_id INT NOT NULL,
@@ -581,20 +561,18 @@ function createTables(PDO $pdo, callable $log) {
             FOREIGN KEY (category_id) REFERENCES knowledge_categories(id) ON DELETE SET NULL,
             INDEX idx_user_id (user_id),
             INDEX idx_category_id (category_id),
-            INDEX idx_status (status),
-            INDEX idx_created_at (created_at),
             FULLTEXT idx_title_content (title, content)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-
-        // 知识笔记表
+        
+        // 6. knowledge_notes 表（依赖 users 和 knowledge_categories）
         "CREATE TABLE IF NOT EXISTS knowledge_notes (
             id INT AUTO_INCREMENT PRIMARY KEY,
             user_id INT NOT NULL,
             category_id INT DEFAULT NULL,
             title VARCHAR(255) NOT NULL,
             content LONGTEXT NOT NULL,
-            images JSON DEFAULT NULL,           -- 原来是 image_path VARCHAR(500)
-            files JSON DEFAULT NULL,            -- 原来是 file_path VARCHAR(500)
+            images JSON DEFAULT NULL,
+            files JSON DEFAULT NULL,
             status TINYINT(1) DEFAULT 1,
             view_count INT DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -604,9 +582,18 @@ function createTables(PDO $pdo, callable $log) {
             FOREIGN KEY (category_id) REFERENCES knowledge_categories(id) ON DELETE SET NULL,
             INDEX idx_user_id (user_id),
             INDEX idx_category_id (category_id),
-            INDEX idx_status (status),
-            INDEX idx_created_at (created_at),
             FULLTEXT idx_title_content (title, content)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        
+        // 7. favorites 表（依赖 users 和 knowledge_notes，最后创建）
+        "CREATE TABLE IF NOT EXISTS favorites (
+            user_id INT NOT NULL,
+            note_id INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, note_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (note_id) REFERENCES knowledge_notes(id) ON DELETE CASCADE,
+            INDEX idx_created_at (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     ];
 
