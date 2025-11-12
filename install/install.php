@@ -21,14 +21,10 @@ define('CONFIG_DIR', BASE_PATH . '/includes/');
 define('CONFIG_PATH', CONFIG_DIR . 'config.php');
 define('LOCK_PATH', BASE_PATH . '/install.lock');
 
-// 检查是否已安装
+// 检测是否已安装，直接跳转
 if (file_exists(LOCK_PATH)) {
-    exit('
-    <div style="text-align:center; padding:50px; font-family:sans-serif; background:#f8f9fa; border-radius:10px; max-width:600px; margin:50px auto;">
-        <h2>⚠️ 系统已安装</h2>
-        <p>如需重新安装，请删除网站根目录下的 <code>install.lock</code> 文件</p>
-        <a href="../login.php" class="btn btn-primary">返回首页</a>
-    </div>');
+    header('Location: ../login.php');
+    exit();
 }
 
 $step = filter_input(INPUT_GET, 'step', FILTER_VALIDATE_INT, ['options' => ['default' => 1, 'min_range' => 1, 'max_range' => 4]]);
