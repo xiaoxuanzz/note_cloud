@@ -96,6 +96,8 @@ try {
         .main-content.collapsed {
             margin-left: 0;
         }
+        
+        /* ========== 完全复制回收站的按钮样式 ========== */
         .toggle-sidebar {
             position: fixed;
             top: 10px;
@@ -114,23 +116,26 @@ try {
             font-size: 20px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
+        
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-200px);
             }
+            .sidebar.active {
+                transform: translateX(0);
+            }
             .main-content {
                 margin-left: 0;
             }
+            /* 完全复制回收站的媒体查询 */
             .toggle-sidebar {
                 display: block;
-            }
-            .sidebar.active {
-                transform: translateX(0);
             }
             .main-content.active {
                 margin-left: 200px;
             }
         }
+        
         .note-card {
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -162,7 +167,7 @@ try {
     
     <div class="container-fluid">
         <div class="row">
-            <div class="col-md-2 sidebar">
+            <div class="col-md-2 sidebar" id="sidebar">
                 <ul class="nav flex-column">
                     <li class="nav-item active">
                         <a class="nav-link" href="index.php">知识库</a>
@@ -186,9 +191,10 @@ try {
                      </li>
                 </ul>
             </div>
-            <div class="col-md-10 main-content">
+            <div class="col-md-10 main-content" id="mainContent">
                 <h2>知识库</h2>
-                <!-- 按钮控件-->
+                
+                <!-- ========== 按钮移到main-content内部，使用left: 85% ========== -->
                 <button class="toggle-sidebar d-lg-none" onclick="toggleSidebar()" style="left: 85%;" id="an">☰</button>
                 <br/>
                 
@@ -304,16 +310,6 @@ try {
             return false; // 阻止默认链接行为
         }
 
-        function isMobile() {
-            return /Mobi|Android|iPhone/i.test(navigator.userAgent);
-        }
-        isMobile();
-        if (isMobile()) {
-            document.querySelector('#an').style.display = 'block';
-        } else {
-            document.querySelector('#an').style.display = 'none';
-        }
-
         function toggleSidebar() {
             const sidebar = document.querySelector('.sidebar');
             const mainContent = document.querySelector('.main-content');
@@ -374,7 +370,7 @@ try {
         function filterNotes() {
             const categoryId = document.getElementById('categoryFilter').value;
             const searchKeyword = document.getElementById('searchInput')?.value ?? '';
-            window.location.href = 'index.php?category_id=' + categoryId + '&search=' + encodeURIComponent(searchKeyword);
+            window.location.href = 'index.php?category_id=' + categoryId + '&search=' + encodeURIComponent($searchKeyword);
         }
 
         let searchTimeout;

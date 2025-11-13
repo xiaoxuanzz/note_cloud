@@ -34,11 +34,14 @@ try {
         .sidebar .nav-link.active { background-color: #6c7ae0; color: white; }
         .main-content { margin-left: 250px; padding: 30px; transition: margin-left 0.3s ease; }
         .main-content.collapsed { margin-left: 0; }
+        
+        /* ========== 复制回收站示例的按钮样式 ========== */
         .toggle-sidebar {
             position: fixed;
             top: 10px;
             left: 10px;
             z-index: 1001;
+            display: none;
             background-color: #343a40;
             color: white;
             border: none;
@@ -51,6 +54,7 @@ try {
             font-size: 20px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
+        
         @media (max-width: 768px) {
             .sidebar { transform: translateX(-250px); }
             .sidebar.active { transform: translateX(0); }
@@ -61,7 +65,8 @@ try {
     </style>
 </head>
 <body>
-    <button class="toggle-sidebar d-md-none" onclick="toggleSidebar()">☰</button>
+    <!-- ========== 修复：移除d-md-none，添加style="left: 85%;" ========== -->
+    <button class="toggle-sidebar" onclick="toggleSidebar()" style="left: 85%;">☰</button>
     
     <div class="sidebar" id="sidebar">
         <h4 class="text-white text-center mb-4">PZIOT 管理系统</h4>

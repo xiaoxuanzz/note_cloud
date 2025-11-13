@@ -68,23 +68,27 @@ try {
         .stat-card:hover {
             transform: translateY(-5px);
         }
+        
+        /* ========== 完全复制回收站示例的按钮样式 ========== */
         .toggle-sidebar {
             position: fixed;
             top: 10px;
-            left: 10px;
+            left: 10px;              /* 基础样式使用 left: 10px */
             z-index: 1001;
+            display: none;            /* 初始隐藏 */
             background-color: #343a40;
             color: white;
             border: none;
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            display: flex;
+            display: flex;            /* 使用flex居中 */
             align-items: center;
             justify-content: center;
             font-size: 20px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
+        
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-250px);
@@ -98,6 +102,7 @@ try {
             .main-content.active {
                 margin-left: 250px;
             }
+            /* 移动端显示按钮 */
             .toggle-sidebar {
                 display: block;
             }
@@ -105,7 +110,8 @@ try {
     </style>
 </head>
 <body>
-    <button class="toggle-sidebar d-md-none" onclick="toggleSidebar()">☰</button>
+    <!-- ========== 关键修复：添加行内样式 style="left: 85%;" 将按钮移到右边 ========== -->
+    <button class="toggle-sidebar" onclick="toggleSidebar()" style="left: 85%;" id="an">☰</button>
     
     <div class="sidebar" id="sidebar">
         <h4 class="text-white text-center mb-4">PZIOT 管理系统</h4>
