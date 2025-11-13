@@ -11,7 +11,7 @@ if (!isset($_SESSION['user_id'])) {
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>笔记助手</title>
 
     <!-- 代码高亮 + 一键复制 -->
@@ -39,49 +39,53 @@ if (!isset($_SESSION['user_id'])) {
             width: 100%;
             height: 100%;
             overflow: hidden;
+            touch-action: pan-y;
         }
 
         body {
-            display: flex;
             background: #f5f5f5;
         }
 
-        /* 重命名为 app-container 避免与 Bootstrap 冲突 */
+        /* 主容器 */
         .app-container {
             display: flex;
-            width: 100vw;
-            height: 100vh;
-            padding: 0;
-            margin: 0;
-            max-width: none;
+            width: 100%;
+            height: 100%;
+            position: relative;
         }
 
         /* ========== 侧边栏 ========== */
         .sidebar {
             width: 320px;
-            min-width: 320px;
-            height: 100vh;
             background: #2c3e50;
             border-right: 1px solid #34495e;
             display: flex;
             flex-direction: column;
             color: #ecf0f1;
             flex-shrink: 0;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+            z-index: 1000;
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100vh;
         }
-
+        .sidebar.collapsed {
+            transform: translateX(-320px);
+        }
         .sidebar-header {
             padding: 20px;
             background: #34495e;
             border-bottom: 1px solid #4a5f7a;
+            flex-shrink: 0;
         }
-
         .sidebar-title {
             font-size: 20px;
             font-weight: bold;
             margin-bottom: 15px;
             color: #fff;
         }
-
         .new-chat-btn {
             background: #3498db;
             color: #fff;
@@ -94,11 +98,9 @@ if (!isset($_SESSION['user_id'])) {
             font-weight: 500;
             transition: background .2s;
         }
-
         .new-chat-btn:hover {
             background: #2980b9;
         }
-
         .storage-info {
             padding: 10px 20px;
             background: #34495e;
@@ -106,19 +108,18 @@ if (!isset($_SESSION['user_id'])) {
             color: #bdc3c7;
             border-bottom: 1px solid #4a5f7a;
             transition: all .3s ease;
+            flex-shrink: 0;
         }
-
         .storage-info.updating {
             color: #3498db;
             font-weight: bold;
         }
-
         .history-panel {
             flex: 1;
             overflow-y: auto;
             padding: 15px;
+            -webkit-overflow-scrolling: touch;
         }
-
         .history-title {
             font-size: 16px;
             font-weight: bold;
@@ -126,7 +127,6 @@ if (!isset($_SESSION['user_id'])) {
             padding-left: 5px;
             color: #bdc3c7;
         }
-
         .history-item {
             background: #34495e;
             border-radius: 8px;
@@ -139,22 +139,18 @@ if (!isset($_SESSION['user_id'])) {
             align-items: center;
             border: 1px solid transparent;
         }
-
         .history-item:hover {
             background: #4a5f7a;
             border-color: #3498db;
         }
-
         .history-item.active {
             background: #3498db;
             border-color: #2980b9;
         }
-
         .history-item-content {
             flex: 1;
             overflow: hidden;
         }
-
         .history-item-title {
             font-weight: 500;
             margin-bottom: 5px;
@@ -163,16 +159,13 @@ if (!isset($_SESSION['user_id'])) {
             text-overflow: ellipsis;
             color: #fff;
         }
-
         .history-item-time {
             font-size: 11px;
             color: #95a5a6;
         }
-
         .history-item.active .history-item-time {
             color: #ecf0f1;
         }
-
         .delete-btn {
             background: #e74c3c;
             color: #fff;
@@ -183,18 +176,17 @@ if (!isset($_SESSION['user_id'])) {
             font-size: 11px;
             margin-left: 10px;
             transition: background .2s;
+            flex-shrink: 0;
         }
-
         .delete-btn:hover {
             background: #c0392b;
         }
-
         .sidebar-footer {
             padding: 15px;
             background: #34495e;
             border-top: 1px solid #4a5f7a;
+            flex-shrink: 0;
         }
-
         .back-btn {
             background: #95a5a6;
             color: #fff;
@@ -207,7 +199,6 @@ if (!isset($_SESSION['user_id'])) {
             font-weight: 500;
             transition: background .2s;
         }
-
         .back-btn:hover {
             background: #7f8c8d;
         }
@@ -220,8 +211,13 @@ if (!isset($_SESSION['user_id'])) {
             height: 100vh;
             background: #fff;
             min-width: 0;
+            margin-left: 320px;
+            width: calc(100% - 320px);
+            transition: margin-left 0.3s ease; /* 主内容区域动画 */
         }
-
+        .chat-panel.collapsed {
+            margin-left: 0;
+        }
         .chat-area {
             flex: 1;
             padding: 20px;
@@ -231,16 +227,16 @@ if (!isset($_SESSION['user_id'])) {
             flex-direction: column;
             gap: 15px;
             scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
         }
-
         .chat-input-area {
             display: flex;
             padding: 15px;
             background: #fff;
             border-top: 1px solid #ddd;
             align-items: center;
+            flex-shrink: 0;
         }
-
         .chat-input {
             flex: 1;
             padding: 12px;
@@ -254,12 +250,10 @@ if (!isset($_SESSION['user_id'])) {
             max-height: 150px;
             font-family: inherit;
         }
-
         .chat-input:focus {
             outline: none;
             border-color: #3498db;
         }
-
         .send-button {
             padding: 10px 25px;
             background: #3498db;
@@ -270,12 +264,11 @@ if (!isset($_SESSION['user_id'])) {
             font-weight: 500;
             transition: background .2s;
             white-space: nowrap;
+            flex-shrink: 0;
         }
-
         .send-button:hover {
             background: #2980b9;
         }
-
         .stop-thinking-btn {
             margin-left: 8px;
             padding: 6px 12px;
@@ -287,8 +280,8 @@ if (!isset($_SESSION['user_id'])) {
             cursor: pointer;
             transition: background .2s;
             white-space: nowrap;
+            flex-shrink: 0;
         }
-
         .stop-thinking-btn:hover {
             background: #c0392b;
         }
@@ -300,15 +293,12 @@ if (!isset($_SESSION['user_id'])) {
             align-items: flex-start;
             animation: fadeIn .3s ease-in;
         }
-
         .user-message {
             justify-content: flex-end;
         }
-
         .bot-message {
             justify-content: flex-start;
         }
-
         .message-content {
             max-width: 70%;
             padding: 10px 14px;
@@ -319,13 +309,11 @@ if (!isset($_SESSION['user_id'])) {
             box-shadow: 0 2px 4px rgba(0,0,0,.08);
             transition: all .2s ease;
         }
-
         .user-message .message-content {
             background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
             color: #fff;
             border-bottom-right-radius: 4px;
         }
-
         .bot-message .message-content {
             background: #fff;
             color: #2c3e50;
@@ -340,26 +328,22 @@ if (!isset($_SESSION['user_id'])) {
             display: inline-flex;
             align-items: center;
         }
-
         .typing-indicator::after {
             content: '';
             animation: typing 1.5s infinite;
         }
-
         @keyframes typing {
             0% { content: '.'; }
             33% { content: '..'; }
             66% { content: '...'; }
             100% { content: '.'; }
         }
-
         .empty-state {
             text-align: center;
             color: #95a5a6;
             padding: 40px;
             font-style: italic;
         }
-
         .error-message {
             background: #fee !important;
             border-color: #fcc !important;
@@ -373,7 +357,6 @@ if (!isset($_SESSION['user_id'])) {
             max-width: calc(100% - 4px);
             box-sizing: border-box;
         }
-
         .copy-btn {
             position: absolute;
             top: 4px;
@@ -387,11 +370,9 @@ if (!isset($_SESSION['user_id'])) {
             z-index: 10;
             transition: background .2s;
         }
-
         .copy-btn:hover {
             background: #f2f2f2;
         }
-
         pre[class*="language-"] {
             margin: 0;
             border-radius: 6px;
@@ -407,11 +388,9 @@ if (!isset($_SESSION['user_id'])) {
             text-align: right;
             margin-top: 5px;
         }
-
         .bot-message .message-actions {
             text-align: left;
         }
-
         .create-note-btn {
             background: #2ecc71;
             color: #fff;
@@ -424,15 +403,77 @@ if (!isset($_SESSION['user_id'])) {
             transition: background .2s;
             margin-top: 8px;
         }
-
         .create-note-btn:hover {
             background: #27ae60;
+        }
+        
+        /* ========== 移动端切换按钮 ========== */
+        .toggle-sidebar {
+            position: absolute; /* 关键：在chat-panel内绝对定位 */
+            top: 10px;
+            left: 85%; /* 右上角位置 */
+            z-index: 1001;
+            background-color: #2c3e50;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: none; /* 默认隐藏，移动端显示 */
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-320px);
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .chat-panel {
+                margin-left: 0;
+                width: 100%;
+            }
+            .chat-panel.active {
+                margin-left: 320px; /* 主内容向右移动 */
+            }
+            .toggle-sidebar {
+                display: block; /* 仅在移动端显示 */
+            }
+            
+            /* 移动端优化 */
+            .message-content {
+                max-width: 85%;
+                font-size: 13px;
+            }
+            .chat-input-area {
+                padding: 10px;
+            }
+            .chat-input {
+                font-size: 13px;
+                padding: 10px;
+                min-height: 40px;
+            }
+            .send-button, .stop-thinking-btn {
+                padding: 8px 15px;
+                font-size: 13px;
+            }
+            .sidebar-title {
+                font-size: 18px;
+            }
+            .new-chat-btn {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="app-container">
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-title">📝 笔记助手</div>
                 <button class="new-chat-btn" onclick="newChat()">+ 新建笔记</button>
@@ -447,7 +488,10 @@ if (!isset($_SESSION['user_id'])) {
             </div>
         </div>
 
-        <div class="chat-panel">
+        <div class="chat-panel" id="chatPanel">
+            <!-- 按钮放在 chat-panel 内部，右上角 -->
+            <button class="toggle-sidebar d-md-none" onclick="toggleSidebar()" style="position: absolute; top: 10px; left: 85%;">☰</button>
+            
             <div class="chat-area" id="chat-area">
                 <div class="message bot-message">
                     <div class="message-content">您好！我是您的专属笔记助手，让我们一起创作和管理您的笔记吧。有什么想法想记录下来吗？</div>
@@ -1033,6 +1077,38 @@ ${chatText}
         // 页面可见性变化时更新存储信息
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && !isPrinting) updateStorageInfo();
+        });
+
+        /* ========== 移动端侧边栏控制 ========== */
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const chatPanel = document.getElementById('chatPanel');
+            sidebar.classList.toggle('active');
+            chatPanel.classList.toggle('active'); // 关键：主内容也移动
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('click', function(event) {
+                const sidebar = document.getElementById('sidebar');
+                const toggleButton = document.querySelector('.toggle-sidebar');
+                
+                if (window.innerWidth <= 768 && 
+                    !sidebar.contains(event.target) && 
+                    !toggleButton.contains(event.target) && 
+                    sidebar.classList.contains('active')) {
+                    sidebar.classList.remove('active');
+                    document.getElementById('chatPanel').classList.remove('active');
+                }
+            });
+        });
+
+        document.querySelectorAll('.sidebar .nav-link, .new-chat-btn, .back-btn').forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    document.getElementById('sidebar').classList.remove('active');
+                    document.getElementById('chatPanel').classList.remove('active');
+                }
+            });
         });
     </script>
 </body>

@@ -33,6 +33,12 @@ try {
             min-height: 100vh;
             position: fixed;
             padding: 20px 0;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+            z-index: 1000;
+        }
+        .sidebar.collapsed {
+            transform: translateX(-250px);
         }
         .sidebar .nav-link {
             color: #dfe6e9;
@@ -51,6 +57,10 @@ try {
         .main-content {
             margin-left: 250px;
             padding: 30px;
+            transition: margin-left 0.3s ease;
+        }
+        .main-content.collapsed {
+            margin-left: 0;
         }
         .stat-card {
             transition: transform 0.3s;
@@ -58,10 +68,46 @@ try {
         .stat-card:hover {
             transform: translateY(-5px);
         }
+        .toggle-sidebar {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1001;
+            background-color: #343a40;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-250px);
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .main-content.active {
+                margin-left: 250px;
+            }
+            .toggle-sidebar {
+                display: block;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="sidebar">
+    <button class="toggle-sidebar d-md-none" onclick="toggleSidebar()">☰</button>
+    
+    <div class="sidebar" id="sidebar">
         <h4 class="text-white text-center mb-4">PZIOT 管理系统</h4>
         <ul class="nav flex-column">
             <li class="nav-item">
@@ -79,7 +125,7 @@ try {
         </ul>
     </div>
 
-    <div class="main-content">
+    <div class="main-content" id="mainContent">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>管理面板</h1>
             <div>
@@ -124,5 +170,37 @@ try {
     </div>
 
     <script src="../js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
+            sidebar.classList.toggle('active');
+            mainContent.classList.toggle('active');
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('click', function(event) {
+                const sidebar = document.getElementById('sidebar');
+                const toggleButton = document.querySelector('.toggle-sidebar');
+                
+                if (window.innerWidth <= 768 && 
+                    !sidebar.contains(event.target) && 
+                    !toggleButton.contains(event.target) && 
+                    sidebar.classList.contains('active')) {
+                    sidebar.classList.remove('active');
+                    document.getElementById('mainContent').classList.remove('active');
+                }
+            });
+        });
+
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    document.getElementById('sidebar').classList.remove('active');
+                    document.getElementById('mainContent').classList.remove('active');
+                }
+            });
+        });
+    </script>
 </body>
 </html>

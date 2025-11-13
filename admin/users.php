@@ -24,15 +24,42 @@ try {
     <title>用户管理 - PZIOT笔记网</title>
     <link href="../css/bootstrap.min.css" rel="stylesheet">
     <style>
-        .sidebar { width: 250px; background-color: #343a40; min-height: 100vh; position: fixed; padding: 20px 0; }
+        .sidebar { width: 250px; background-color: #343a40; min-height: 100vh; position: fixed; padding: 20px 0; transition: transform 0.3s ease; transform: translateX(0); z-index: 1000; }
+        .sidebar.collapsed { transform: translateX(-250px); }
         .sidebar .nav-link { color: #dfe6e9; padding: 12px 20px; display: block; transition: all 0.3s; }
         .sidebar .nav-link:hover { background-color: #485460; color: white; }
         .sidebar .nav-link.active { background-color: #6c7ae0; color: white; }
-        .main-content { margin-left: 250px; padding: 30px; }
+        .main-content { margin-left: 250px; padding: 30px; transition: margin-left 0.3s ease; }
+        .main-content.collapsed { margin-left: 0; }
+        .toggle-sidebar {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1001;
+            background-color: #343a40;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-250px); }
+            .sidebar.active { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+            .main-content.active { margin-left: 250px; }
+        }
     </style>
 </head>
 <body>
-    <div class="sidebar">
+    <button class="toggle-sidebar d-md-none" onclick="toggleSidebar()">☰</button>
+    
+    <div class="sidebar" id="sidebar">
         <h4 class="text-white text-center mb-4">PZIOT 管理系统</h4>
         <ul class="nav flex-column">
             <li class="nav-item"><a class="nav-link" href="index.php">📊 数据统计</a></li>
@@ -42,7 +69,7 @@ try {
         </ul>
     </div>
 
-    <div class="main-content">
+    <div class="main-content" id="mainContent">
         <!-- ✅ 标题 -->
         <h2 class="mb-4">用户管理</h2>
         
@@ -84,5 +111,37 @@ try {
     </div>
 
     <script src="../js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
+            sidebar.classList.toggle('active');
+            mainContent.classList.toggle('active');
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('click', function(event) {
+                const sidebar = document.getElementById('sidebar');
+                const toggleButton = document.querySelector('.toggle-sidebar');
+                
+                if (window.innerWidth <= 768 && 
+                    !sidebar.contains(event.target) && 
+                    !toggleButton.contains(event.target) && 
+                    sidebar.classList.contains('active')) {
+                    sidebar.classList.remove('active');
+                    document.getElementById('mainContent').classList.remove('active');
+                }
+            });
+        });
+
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    document.getElementById('sidebar').classList.remove('active');
+                    document.getElementById('mainContent').classList.remove('active');
+                }
+            });
+        });
+    </script>
 </body>
 </html>
