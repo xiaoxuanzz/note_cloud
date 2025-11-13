@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['chat_title'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PZIOT笔记网 - 创建笔记</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
     <!-- ✅ 修复：使用相对路径或移除 -->
     <style>
         .sidebar {
@@ -156,7 +156,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['chat_title'])) {
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../js/bootstrap.bundle.min.js"></script>
     <script>
         // 移动端侧边栏交互（简化版）
         document.addEventListener('DOMContentLoaded', function() {

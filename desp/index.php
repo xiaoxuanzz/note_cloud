@@ -745,7 +745,7 @@ if (!isset($_SESSION['user_id'])) {
         /* ========== 调用 Kimi API ========== */
         async function callKimiAPIWithRetry(retryCount = 1) {
             const apiKey = 'YOU_KIMI_API_KEY'; // 请替换
-            const url = 'https://api.moonshot.cn/v1/chat/completions ';
+            const url = 'https://api.moonshot.cn/v1/chat/completions';
             
             const messages = [{
                 role: 'system',
