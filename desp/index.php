@@ -11,13 +11,20 @@ if (!isset($_SESSION['user_id'])) {
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>笔记助手</title>
 
     <!-- 代码高亮 + 一键复制 -->
-    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css" rel="stylesheet" />
-    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/clipboard@2.0.11/dist/clipboard.min.js"></script>
+    <link href="../css/bootstrap.min.css" rel="stylesheet" />
+    <script src="../js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Prism.js 代码高亮 -->
+    <link href="../css/prism.css" rel="stylesheet" />
+    <script src="../js/prism.js"></script>
+    <script src="../js/prism-javascript.min.js"></script>
+    
+    <!-- Clipboard.js 复制功能 -->
+    <script src="../js/clipboard.min.js"></script>
 
     <style>
         /* ========== 基础重置 & 布局 ========== */
@@ -28,28 +35,38 @@ if (!isset($_SESSION['user_id'])) {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
         body {
             display: flex;
-            height: 100vh;
-            overflow: hidden;
             background: #f5f5f5;
         }
 
-        .container {
+        /* 重命名为 app-container 避免与 Bootstrap 冲突 */
+        .app-container {
             display: flex;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
+            padding: 0;
+            margin: 0;
+            max-width: none;
         }
 
         /* ========== 侧边栏 ========== */
         .sidebar {
             width: 320px;
-            height: 100%;
+            min-width: 320px;
+            height: 100vh;
             background: #2c3e50;
             border-right: 1px solid #34495e;
             display: flex;
             flex-direction: column;
             color: #ecf0f1;
+            flex-shrink: 0;
         }
 
         .sidebar-header {
@@ -200,8 +217,9 @@ if (!isset($_SESSION['user_id'])) {
             flex: 1;
             display: flex;
             flex-direction: column;
-            height: 100%;
+            height: 100vh;
             background: #fff;
+            min-width: 0;
         }
 
         .chat-area {
@@ -381,7 +399,7 @@ if (!isset($_SESSION['user_id'])) {
             overflow-x: auto;
             white-space: pre;
             word-break: normal;
-            background: #2d2d2d; /* Prism tomorrow theme背景 */
+            background: #2d2d2d;
         }
 
         /* ========== 操作按钮 ========== */
@@ -413,7 +431,7 @@ if (!isset($_SESSION['user_id'])) {
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="app-container">
         <div class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-title">📝 笔记助手</div>
@@ -683,7 +701,7 @@ if (!isset($_SESSION['user_id'])) {
         /* ========== 调用 Kimi API ========== */
         async function callKimiAPIWithRetry(retryCount = 1) {
             const apiKey = 'YOU_KIMI_API_KEY'; // 请替换
-            const url = 'https://api.moonshot.cn/v1/chat/completions';
+            const url = 'https://api.moonshot.cn/v1/chat/completions ';
             
             const messages = [{
                 role: 'system',
@@ -773,7 +791,7 @@ if (!isset($_SESSION['user_id'])) {
                         
                         resolve();
                     }
-                }, 5); // 最快建议值
+                }, 5);
             });
         }
 
@@ -853,7 +871,7 @@ if (!isset($_SESSION['user_id'])) {
 
                 // 最后一条AI消息追加"创建笔记"按钮（确保在最下面）
                 if (m.role === 'bot' && i === currentChat.messages.length - 1 && !m.isLoading) {
-                    html += `<div class="message-actions"><button class="create-note-btn" onclick="createNoteFromChat('${currentChat.id}')">📄 创建为笔记</button></div>`;
+                    html += `<div class="message-actions"><button class="create-note-btn" onclick="createNoteFromChat('${currentChat.id}')">📄 摘要为笔记</button></div>`;
                 }
                 
                 msgDiv.innerHTML = html;
@@ -870,8 +888,8 @@ if (!isset($_SESSION['user_id'])) {
 
         /* ========== 新增：智能摘要生成 ========== */
         async function summarizeChat(messages) {
-            const apiKey = 'sk-2tvDaVrWDIYIHSTIXusqFqxhTJQqSga8rPYi6Co7LxgjEvVD'; // 请使用你的API Key
-            const url = 'https://api.moonshot.cn/v1/chat/completions';
+            const apiKey = 'YOU_KIMI_API_KEY'; // 请使用你的API Key
+            const url = 'https://api.moonshot.cn/v1/chat/completions ';
             
             // 提取有效对话内容（排除加载中和错误消息）
             const validMessages = messages.filter(m => !m.isLoading && !m.isError);
