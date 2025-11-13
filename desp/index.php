@@ -14,7 +14,7 @@ if (!isset($_SESSION['user_id'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>笔记助手</title>
 
-    <!-- 代码高亮 + 一键复制 -->
+    <!-- 代码高亮 -->
     <link href="../css/bootstrap.min.css" rel="stylesheet" />
     <script src="../js/bootstrap.bundle.min.js"></script>
     
@@ -22,9 +22,6 @@ if (!isset($_SESSION['user_id'])) {
     <link href="../css/prism.css" rel="stylesheet" />
     <script src="../js/prism.js"></script>
     <script src="../js/prism-javascript.min.js"></script>
-    
-    <!-- Clipboard.js 复制功能 -->
-    <script src="../js/clipboard.min.js"></script>
 
     <style>
         /* ========== 基础重置 & 布局 ========== */
@@ -357,22 +354,6 @@ if (!isset($_SESSION['user_id'])) {
             max-width: calc(100% - 4px);
             box-sizing: border-box;
         }
-        .copy-btn {
-            position: absolute;
-            top: 4px;
-            right: 4px;
-            font-size: 12px;
-            padding: 2px 6px;
-            border: 1px solid #ccc;
-            background: #fff;
-            cursor: pointer;
-            border-radius: 3px;
-            z-index: 10;
-            transition: background .2s;
-        }
-        .copy-btn:hover {
-            background: #f2f2f2;
-        }
         pre[class*="language-"] {
             margin: 0;
             border-radius: 6px;
@@ -407,7 +388,7 @@ if (!isset($_SESSION['user_id'])) {
             background: #27ae60;
         }
         
-        /* ========== 移动端切换按钮 ========== */
+        /* ========== 移动端侧边栏控制 ========== */
         .toggle-sidebar {
             position: absolute; /* 关键：在chat-panel内绝对定位 */
             top: 10px;
@@ -852,7 +833,7 @@ if (!isset($_SESSION['user_id'])) {
             }
         }
 
-        /* ========== 更新聊天区域（修复代码块识别） ========== */
+        /* ========== 更新聊天区域 ========== */
         function updateChatArea() {
             const area = document.getElementById('chat-area');
             area.innerHTML = '';
@@ -898,13 +879,12 @@ if (!isset($_SESSION['user_id'])) {
                 // 对剩余文本做转义 + 换行
                 raw = escapeHtml(raw).replace(/\n/g, '<br>');
 
-                // 倒序还原代码块（带复制按钮）
+                // 倒序还原代码块（无复制按钮）
                 for (let idx = codeBlocks.length - 1; idx >= 0; idx--) {
                     const b = codeBlocks[idx];
                     const escapedCode = escapeHtml(b.code);
                     raw = raw.replace(`{{CODE_BLOCK_${idx}}}`,
                         `<div class="code-block-wrapper">
-                            <button class="copy-btn" data-clipboard-target="#${b.id}" onclick="event.stopPropagation()">复制</button>
                             <pre><code id="${b.id}" class="language-${b.lang}">${escapedCode}</code></pre>
                         </div>`
                     );
@@ -925,15 +905,14 @@ if (!isset($_SESSION['user_id'])) {
             // 自动平滑滚动到底部
             area.scrollTop = area.scrollHeight;
             
-            // 高亮 + 绑定复制
+            // 重新高亮代码
             Prism.highlightAll();
-            new ClipboardJS('.copy-btn');
         }
 
         /* ========== 新增：智能摘要生成 ========== */
         async function summarizeChat(messages) {
             const apiKey = 'YOU_KIMI_API_KEY'; // 请使用你的API Key
-            const url = 'https://api.moonshot.cn/v1/chat/completions ';
+            const url = 'https://api.moonshot.cn/v1/chat/completions';
             
             // 提取有效对话内容（排除加载中和错误消息）
             const validMessages = messages.filter(m => !m.isLoading && !m.isError);
@@ -1003,7 +982,7 @@ ${chatText}
             }
         }
         
-        /* ========== 修改：创建笔记（带自动摘要） ========== */
+        /* ========== 创建笔记（带自动摘要） ========== */
         async function createNoteFromChat(chatId) {
             if (isPrinting) {
                 alert('请等待当前消息输出完成后再创建笔记');
@@ -1088,6 +1067,10 @@ ${chatText}
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // 重新高亮代码
+            Prism.highlightAll();
+            
+            // 点击外部关闭侧边栏
             document.addEventListener('click', function(event) {
                 const sidebar = document.getElementById('sidebar');
                 const toggleButton = document.querySelector('.toggle-sidebar');

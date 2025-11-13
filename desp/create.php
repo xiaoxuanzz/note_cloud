@@ -91,29 +91,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['chat_title'])) {
     </style>
 </head>
 <body>
-    <!-- ✅ 修复：添加 container-fluid -->
-    <div class="container-fluid">
-        <div class="row">
-            <div class="col-md-2 sidebar">
-                <ul class="nav flex-column">
-                    <li class="nav-item active">
-                        <!-- ✅ 修复：改为 index.php -->
-                        <a class="nav-link" href="index.php">知识库</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="../recycle.php">回收站</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="../favorites.php">收藏</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="index.php" target="_blank">AI智能笔记</a>
-                    </li>
-                   <li class="nav-item">
-                         <a class="nav-link" href="../logout.php">退出登录</a>
-                     </li>
-                </ul>
-            </div>
             <div class="col-md-10 main-content">
                 <h2>创建笔记</h2>
                 
