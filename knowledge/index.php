@@ -2,6 +2,33 @@
 session_start();
 include('../includes/config.php');
 
+// ===== 网站访问统计（移到主入口）=====
+$visit_file = '../data/visits.json';
+if (!file_exists(dirname($visit_file))) {
+    mkdir(dirname($visit_file), 0755, true);
+}
+
+// 读取统计
+$visits = ['total' => 0, 'today' => 0, 'last_date' => date('Y-m-d')];
+if (file_exists($visit_file)) {
+    $visits = json_decode(file_get_contents($visit_file), true) ?? $visits;
+}
+
+// 更新统计
+$today = date('Y-m-d');
+if ($visits['last_date'] !== $today) {
+    $visits['today'] = 0;
+    $visits['last_date'] = $today;
+}
+
+// 防止重复计数（基于session）
+if (!isset($_SESSION['visited_today'])) {
+    $visits['total']++;
+    $visits['today']++;
+    $_SESSION['visited_today'] = true;
+    file_put_contents($visit_file, json_encode($visits));
+}
+
 // 检查用户是否登录
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../login.php");
@@ -54,6 +81,7 @@ try {
     error_log("Failed to fetch notes: " . $e->getMessage());
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -134,6 +162,18 @@ try {
                 margin-left: 200px;
             }
         }
+		/* 添加访问统计提示 */
+		        .visit-stats {
+		            position: fixed;
+		            bottom: 10px;
+		            right: 10px;
+		            background: rgba(0,0,0,0.7);
+		            color: white;
+		            padding: 5px 10px;
+		            border-radius: 5px;
+		            font-size: 12px;
+		            z-index: 1000;
+		        }
         
         .note-card {
             border-radius: 10px;
@@ -366,12 +406,10 @@ try {
             }
         }
 
-        /* ==========  只改这里：把 $searchKeyword 换成 JS 变量  ========== */
         function filterNotes() {
             const categoryId = document.getElementById('categoryFilter').value;
-            const keyword    = document.getElementById('searchInput').value.trim();
-            window.location.href = 'index.php?category_id=' + categoryId +
-                                   '&search=' + encodeURIComponent(keyword);
+            const searchKeyword = document.getElementById('searchInput')?.value ?? '';
+            window.location.href = 'index.php?category_id=' + categoryId + '&search=' + encodeURIComponent($searchKeyword);
         }
 
         let searchTimeout;
@@ -384,5 +422,11 @@ try {
             }, 400);
         });
     </script>
+	<!-- 显示访问统计（可选，仅管理员可见） -->
+	<?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+	<div class="visit-stats">
+	    今日: <?php echo number_format($visits['today']); ?> | 总计: <?php echo number_format($visits['total']); ?>
+	</div>
+	<?php endif; ?>
 </body>
 </html>

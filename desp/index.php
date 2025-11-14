@@ -32,9 +32,17 @@ if (!isset($_SESSION['user_id'])) {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
+        /* 新增：使用CSS变量动态控制高度 */
+        :root {
+            --app-height: 100vh;
+            --app-width: 100vw;
+        }
+
         html, body {
             width: 100%;
+            width: var(--app-width);
             height: 100%;
+            height: var(--app-height);
             overflow: hidden;
             touch-action: pan-y;
         }
@@ -47,7 +55,9 @@ if (!isset($_SESSION['user_id'])) {
         .app-container {
             display: flex;
             width: 100%;
+            width: var(--app-width);
             height: 100%;
+            height: var(--app-height);
             position: relative;
         }
 
@@ -61,16 +71,18 @@ if (!isset($_SESSION['user_id'])) {
             color: #ecf0f1;
             flex-shrink: 0;
             transition: transform 0.3s ease;
-            transform: translateX(0);
-            z-index: 1000;
+            z-index: 1050; /* 提高z-index确保在最上层 */
+            transform: translateX(-320px); /* 移动端默认隐藏 */
             position: fixed;
             left: 0;
             top: 0;
-            height: 100vh;
+            height: 100%;
+            height: var(--app-height);
         }
-        .sidebar.collapsed {
-            transform: translateX(-320px);
+        .sidebar.active {
+            transform: translateX(0); /* 移动端显示 */
         }
+        
         .sidebar-header {
             padding: 20px;
             background: #34495e;
@@ -205,15 +217,16 @@ if (!isset($_SESSION['user_id'])) {
             flex: 1;
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: 100%;
+            height: var(--app-height);
             background: #fff;
             min-width: 0;
-            margin-left: 320px;
+            margin-left: 320px; /* 桌面端默认显示侧边栏 */
             width: calc(100% - 320px);
-            transition: margin-left 0.3s ease; /* 主内容区域动画 */
+            position: relative; /* 为按钮定位提供参考 */
         }
-        .chat-panel.collapsed {
-            margin-left: 0;
+        .chat-panel.active {
+            margin-left: 0; /* 移动端隐藏侧边栏时占满全屏 */
         }
         .chat-area {
             flex: 1;
@@ -406,16 +419,36 @@ if (!isset($_SESSION['user_id'])) {
             font-size: 20px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
             display: none; /* 默认隐藏，移动端显示 */
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            user-select: none;
         }
+        
+        /* 移动端遮罩层 */
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1040;
+            display: none;
+        }
+        .sidebar-overlay.active {
+            display: block;
+        }
+
         @media (max-width: 768px) {
             .sidebar {
-                transform: translateX(-320px);
+                transform: translateX(-320px); /* 移动端默认隐藏 */
             }
             .sidebar.active {
-                transform: translateX(0);
+                transform: translateX(0); /* 移动端显示 */
             }
             .chat-panel {
-                margin-left: 0;
+                margin-left: 0; /* 移动端占满全屏 */
                 width: 100%;
             }
             .chat-panel.active {
@@ -450,10 +483,38 @@ if (!isset($_SESSION['user_id'])) {
                 font-size: 13px;
             }
         }
+        
+        @media (min-width: 769px) {
+            .sidebar {
+                transform: translateX(0); /* 桌面端始终显示 */
+            }
+            .chat-panel {
+                margin-left: 320px; /* 桌面端默认有边距 */
+            }
+            .toggle-sidebar {
+                display: none !important; /* 桌面端隐藏按钮 */
+            }
+        }
+
+        /* 动画效果 */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 <body>
     <div class="app-container">
+        <!-- 新增：遮罩层 -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        
+        <!-- 侧边栏 -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-title">📝 笔记助手</div>
@@ -469,9 +530,10 @@ if (!isset($_SESSION['user_id'])) {
             </div>
         </div>
 
+        <!-- 聊天面板 -->
         <div class="chat-panel" id="chatPanel">
-            <!-- 按钮放在 chat-panel 内部，右上角 -->
-            <button class="toggle-sidebar d-md-none" onclick="toggleSidebar()" style="position: absolute; top: 10px; left: 85%;">☰</button>
+            <!-- 按钮直接放在这里，使用类控制显示 -->
+            <button class="toggle-sidebar" onclick="toggleSidebar()" type="button">☰</button>
             
             <div class="chat-area" id="chat-area">
                 <div class="message bot-message">
@@ -504,6 +566,42 @@ if (!isset($_SESSION['user_id'])) {
         let printSaveTimer = null;
         let printInterval = null;
         let thinkingIndex = -1;
+
+        /* ========== 动态视口高度修复 - 核心代码 ========== */
+        function setAppHeight() {
+            const doc = document.documentElement;
+            // 优先使用 visualViewport（现代浏览器）
+            const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            const width = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+            
+            doc.style.setProperty('--app-height', `${height}px`);
+            doc.style.setProperty('--app-width', `${width}px`);
+        }
+
+        function initViewportHeight() {
+            setAppHeight();
+            
+            // 监听 visualViewport 变化
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', setAppHeight);
+            }
+            
+            // 降级监听 window resize
+            window.addEventListener('resize', setAppHeight);
+            
+            // 监听方向变化
+            window.addEventListener('orientationchange', () => {
+                setTimeout(setAppHeight, 100); // 延迟确保方向变化完成
+            });
+        }
+
+        // 页面加载时调用
+        document.addEventListener('DOMContentLoaded', function() {
+            initViewportHeight();
+            
+            // 定期更新（应对某些浏览器的特殊情况）
+            setInterval(setAppHeight, 1000);
+        });
 
         function initDatabase() {
             const req = indexedDB.open(dbName, 1);
@@ -778,7 +876,7 @@ if (!isset($_SESSION['user_id'])) {
             }
         }
 
-        /* ========== 打字机效果（最快版本） ========== */
+        /* ========== 打字机效果 ========== */
         async function typeWriterEffect(text, msgIdx) {
             isPrinting = true;
             thinkingIndex = msgIdx;
@@ -1062,8 +1160,11 @@ ${chatText}
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const chatPanel = document.getElementById('chatPanel');
+            const overlay = document.getElementById('sidebarOverlay');
+            
             sidebar.classList.toggle('active');
-            chatPanel.classList.toggle('active'); // 关键：主内容也移动
+            chatPanel.classList.toggle('active'); // 主内容也移动
+            overlay.classList.toggle('active');
         }
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -1074,22 +1175,41 @@ ${chatText}
             document.addEventListener('click', function(event) {
                 const sidebar = document.getElementById('sidebar');
                 const toggleButton = document.querySelector('.toggle-sidebar');
+                const overlay = document.getElementById('sidebarOverlay');
+                const chatPanel = document.getElementById('chatPanel');
                 
                 if (window.innerWidth <= 768 && 
                     !sidebar.contains(event.target) && 
                     !toggleButton.contains(event.target) && 
                     sidebar.classList.contains('active')) {
                     sidebar.classList.remove('active');
-                    document.getElementById('chatPanel').classList.remove('active');
+                    chatPanel.classList.remove('active');
+                    overlay.classList.remove('active');
                 }
             });
+            
+            // 点击遮罩层关闭
+            const overlay = document.getElementById('sidebarOverlay');
+            if (overlay) {
+                overlay.addEventListener('click', function() {
+                    const sidebar = document.getElementById('sidebar');
+                    const chatPanel = document.getElementById('chatPanel');
+                    sidebar.classList.remove('active');
+                    chatPanel.classList.remove('active');
+                    overlay.classList.remove('active');
+                });
+            }
         });
 
         document.querySelectorAll('.sidebar .nav-link, .new-chat-btn, .back-btn').forEach(link => {
             link.addEventListener('click', function() {
                 if (window.innerWidth <= 768) {
-                    document.getElementById('sidebar').classList.remove('active');
-                    document.getElementById('chatPanel').classList.remove('active');
+                    const sidebar = document.getElementById('sidebar');
+                    const chatPanel = document.getElementById('chatPanel');
+                    const overlay = document.getElementById('sidebarOverlay');
+                    sidebar.classList.remove('active');
+                    chatPanel.classList.remove('active');
+                    overlay.classList.remove('active');
                 }
             });
         });
