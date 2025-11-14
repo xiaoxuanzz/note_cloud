@@ -54,7 +54,6 @@ try {
     error_log("Failed to fetch notes: " . $e->getMessage());
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -367,10 +366,12 @@ try {
             }
         }
 
+        /* ==========  只改这里：把 $searchKeyword 换成 JS 变量  ========== */
         function filterNotes() {
             const categoryId = document.getElementById('categoryFilter').value;
-            const searchKeyword = document.getElementById('searchInput')?.value ?? '';
-            window.location.href = 'index.php?category_id=' + categoryId + '&search=' + encodeURIComponent($searchKeyword);
+            const keyword    = document.getElementById('searchInput').value.trim();
+            window.location.href = 'index.php?category_id=' + categoryId +
+                                   '&search=' + encodeURIComponent(keyword);
         }
 
         let searchTimeout;
